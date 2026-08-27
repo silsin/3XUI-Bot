@@ -1,0 +1,14 @@
+services:
+  bot:
+    build: .
+    image: alovpn-bot
+    container_name: alovpn-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # منطقه زمانی کانتینر (برای زمان‌بند و لاگ‌ها)
+      TZ: ${TIMEZONE:-Asia/Tehran}
+    volumes:
+      # پایگاه‌داده SQLite بین اجراها حفظ می‌شود
+      - ./data:/app/data
