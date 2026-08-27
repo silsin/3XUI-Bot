@@ -10,5 +10,8 @@ services:
       # منطقه زمانی کانتینر (برای زمان‌بند و لاگ‌ها)
       TZ: ${TIMEZONE:-Asia/Tehran}
     volumes:
-      # پایگاه‌داده SQLite بین اجراها حفظ می‌شود
-      - ./data:/app/data
+      # ولوم نام‌دار: مستقل از یوزر هاست، توسط appuser قابل نوشتن است
+      - bot_data:/app/data
+
+volumes:
+  bot_data:

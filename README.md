@@ -30,8 +30,18 @@ docker compose logs -f        # مشاهده لاگ‌ها
 docker compose down           # توقف
 ```
 
-دیتابیس در پوشه `./data` روی هاست ذخیره می‌شود و بین اجراها/به‌روزرسانی‌ها
-حفظ می‌ماند. پس از تغییر کد: `docker compose up -d --build`.
+دیتابیس SQLite در یک **ولوم نام‌دار داکر** به نام `bot_data` ذخیره می‌شود و بین
+اجراها و به‌روزرسانی‌ها حفظ می‌ماند (مستقل از کاربر هاست تا مشکل دسترسی پیش نیاید).
+پس از تغییر کد: `docker compose up -d --build`.
+
+تهیه نسخه پشتیبان از دیتابیس:
+
+```bash
+docker run --rm -v alovpnbot_bot_data:/data -v "$PWD":/backup alpine \
+  cp /data/bot.db /backup/bot.db.bak
+```
+
+> نام ولوم معمولاً `alovpnbot_bot_data` است؛ با `docker volume ls` بررسی کنید.
 
 ## راه‌اندازی بدون Docker
 
