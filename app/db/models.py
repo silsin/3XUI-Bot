@@ -134,6 +134,8 @@ class Order(Base):
 
     receipt_file_id: Mapped[str | None] = mapped_column(String(256))
     receipt_is_document: Mapped[bool] = mapped_column(Boolean, default=False)
+    # پیام‌های رسید ارسال‌شده به ادمین‌ها: JSON از [[chat_id, message_id], ...]
+    notify_msgs: Mapped[str] = mapped_column(Text, default="")
     admin_id: Mapped[int | None] = mapped_column(BigInteger)
     admin_note: Mapped[str | None] = mapped_column(Text)
 

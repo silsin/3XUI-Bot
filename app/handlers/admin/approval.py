@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone
 
@@ -20,7 +21,7 @@ from app.services import provisioning
 from app.services.vpn import VpnError
 from app.states import AdminFlow
 from app.texts import MSG_ORDER_REJECTED
-from app.utils.formatting import money
+from app.utils.formatting import money, traffic
 
 logger = logging.getLogger(__name__)
 router = Router(name="admin_approval")
@@ -112,7 +113,9 @@ async def approve(
         except Exception:  # noqa: BLE001
             logger.info("could not notify referrer %s", referrer.id)
 
-    await _mark_reviewed(call, f"✅ تأیید شد و کانفیگ ارسال گردید. (توسط {call.from_user.id})")
+    await _mark_reviewed(
+        bot, order, f"✅ تأیید شد و کانفیگ ارسال گردید. (توسط {call.from_user.id})"
+    )
 
 
 @router.callback_query(inline.ReceiptCB.filter(F.action == "reject"))
@@ -163,17 +166,36 @@ async def reject_finish(
     except Exception:  # noqa: BLE001
         logger.info("could not notify user %s about rejection", order.user_id)
 
+    await _mark_reviewed(
+        bot, order, f"❌ رد شد. (توسط {message.from_user.id})\n{note_line}"
+    )
     await message.answer(f"❌ سفارش #{order.id} رد شد و به کاربر اطلاع داده شد.")
 
 
-async def _mark_reviewed(call: CallbackQuery, note: str) -> None:
-    """کپشن پیام رسید را به‌روز و دکمه‌ها را حذف می‌کند."""
-    base = call.message.caption or call.message.text or ""
-    new_text = f"{base}\n\n{note}"
+async def _mark_reviewed(bot: Bot, order: Order, note: str) -> None:
+    """در همه چت‌های ادمین‌ها دکمه‌ها را حذف و وضعیت نهایی را نمایش می‌دهد."""
+    caption = (
+        f"🧾 <b>سفارش #{order.id}</b>\n"
+        f"{order.title}\n"
+        f"⏱ {order.days} روز | 📊 {traffic(order.traffic_mb)}\n"
+        f"💰 {money(order.amount)} تومان\n\n"
+        f"{note}"
+    )
     try:
-        if call.message.caption is not None:
-            await call.message.edit_caption(caption=new_text, reply_markup=None)
-        else:
-            await call.message.edit_text(new_text, reply_markup=None)
-    except Exception:  # noqa: BLE001
-        pass
+        msgs = json.loads(order.notify_msgs or "[]")
+    except ValueError:
+        msgs = []
+    for entry in msgs:
+        try:
+            chat_id, message_id = entry
+            await bot.edit_message_caption(
+                chat_id=chat_id, message_id=message_id,
+                caption=caption, reply_markup=None,
+            )
+        except Exception:  # noqa: BLE001 — حذف دکمه حتی اگر ویرایش کپشن ناموفق بود
+            try:
+                await bot.edit_message_reply_markup(
+                    chat_id=entry[0], message_id=entry[1], reply_markup=None
+                )
+            except Exception:  # noqa: BLE001
+                pass

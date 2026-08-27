@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 
 from aiogram import Bot, F, Router
@@ -296,8 +297,8 @@ async def receipt_invalid(message: Message) -> None:
 async def _notify_admin(
     bot: Bot, session: AsyncSession, order: Order, user: User, message: Message
 ) -> None:
-    target = get_settings().receipts_target
-    if target is None:
+    targets = get_settings().receipts_targets
+    if not targets:
         logger.warning("no receipts target configured; order %s", order.id)
         return
 
@@ -312,14 +313,20 @@ async def _notify_admin(
         f"💰 مبلغ: <b>{money(order.amount)} تومان</b>"
     )
     markup = inline.receipt_review_kb(order.id)
-    try:
-        if order.receipt_is_document:
-            await bot.send_document(
-                target, order.receipt_file_id, caption=caption, reply_markup=markup
-            )
-        else:
-            await bot.send_photo(
-                target, order.receipt_file_id, caption=caption, reply_markup=markup
-            )
-    except Exception:  # noqa: BLE001
-        logger.exception("failed to notify admin for order %s", order.id)
+    sent: list[list[int]] = []
+    for target in targets:
+        try:
+            if order.receipt_is_document:
+                msg = await bot.send_document(
+                    target, order.receipt_file_id, caption=caption, reply_markup=markup
+                )
+            else:
+                msg = await bot.send_photo(
+                    target, order.receipt_file_id, caption=caption, reply_markup=markup
+                )
+            sent.append([msg.chat.id, msg.message_id])
+        except Exception:  # noqa: BLE001 — یک ادمین ممکن است ربات را استارت نکرده باشد
+            logger.exception("failed to notify admin %s for order %s", target, order.id)
+
+    order.notify_msgs = json.dumps(sent)
+    await session.commit()

@@ -54,6 +54,11 @@ def _migrate_gb_to_mb(conn) -> None:
         if "traffic_gb" in cols and "traffic_mb" not in cols:
             conn.execute(text(f"ALTER TABLE {table} ADD COLUMN traffic_mb INTEGER DEFAULT 0"))
             conn.execute(text(f"UPDATE {table} SET traffic_mb = traffic_gb * 1024"))
+    # ستون notify_msgs برای پیگیری پیام رسید همه ادمین‌ها
+    if "orders" in tables:
+        ocols = {c["name"] for c in inspector.get_columns("orders")}
+        if "notify_msgs" not in ocols:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN notify_msgs TEXT DEFAULT ''"))
     # مهاجرت کلید تنظیمات trial_gb -> trial_mb
     if "settings" in tables:
         row = conn.execute(

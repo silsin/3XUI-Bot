@@ -57,10 +57,17 @@ class Settings(BaseSettings):
 
     @property
     def receipts_target(self) -> int | None:
-        """جایی که رسیدها ارسال می‌شود."""
+        """اولین مقصد رسید (سازگاری با کد قدیمی)."""
+        targets = self.receipts_targets
+        return targets[0] if targets else None
+
+    @property
+    def receipts_targets(self) -> list[int]:
+        """همه مقصدهای دریافت رسید. اگر چت اختصاصی تعیین شده باشد فقط همان،
+        در غیر این صورت همه ادمین‌ها."""
         if self.receipts_chat_id:
-            return self.receipts_chat_id
-        return self.admin_ids[0] if self.admin_ids else None
+            return [self.receipts_chat_id]
+        return list(self.admin_ids)
 
     def is_admin(self, user_id: int | None) -> bool:
         return user_id is not None and user_id in self.admin_ids
