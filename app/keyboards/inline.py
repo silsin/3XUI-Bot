@@ -189,7 +189,7 @@ def package_summary(package: Package, duration: Duration) -> str:
         "",
         f"📦 پکیج: <b>{package.title}</b>",
         f"⏱ مدت: <b>{duration.title}</b>",
-        f"📊 حجم: <b>{traffic(package.traffic_gb)}</b>",
+        f"📊 حجم: <b>{traffic(package.traffic_mb)}</b>",
         f"📱 تعداد دستگاه: <b>{fa_digits(package.device_limit) if package.device_limit else 'نامحدود'}</b>",
     ]
     if package.description:

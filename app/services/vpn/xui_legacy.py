@@ -27,7 +27,7 @@ from app.services.vpn.links import build_link
 
 logger = logging.getLogger(__name__)
 
-GB = 1024 ** 3
+MB = 1024 ** 2
 
 
 def _loads(raw: Any) -> dict:
@@ -136,7 +136,7 @@ class XuiLegacyClient:
         inbound_id: int,
         email: str,
         days: int,
-        traffic_gb: int,
+        traffic_mb: int,
         device_limit: int = 0,
         telegram_id: int | None = None,
     ) -> ProvisionResult:
@@ -150,7 +150,7 @@ class XuiLegacyClient:
         client: dict[str, Any] = {
             "id": client_uuid,
             "email": email,
-            "totalGB": max(traffic_gb, 0) * GB,
+            "totalGB": max(traffic_mb, 0) * MB,
             "expiryTime": expiry_ms,
             "enable": True,
             "tgId": str(telegram_id or ""),
@@ -211,7 +211,7 @@ class XuiLegacyClient:
         client_uuid: str,
         email: str,
         add_days: int,
-        add_traffic_gb: int,
+        add_traffic_mb: int,
         reset_traffic: bool = False,
     ) -> None:
         inbound = await self.get_inbound(inbound_id)
@@ -222,11 +222,11 @@ class XuiLegacyClient:
         base = current if current > now_ms else now_ms
         client["expiryTime"] = base + add_days * 86400_000 if add_days > 0 else 0
 
-        if add_traffic_gb > 0:
+        if add_traffic_mb > 0:
             current_total = int(client.get("totalGB") or 0)
             client["totalGB"] = (
-                add_traffic_gb * GB if reset_traffic
-                else current_total + add_traffic_gb * GB
+                add_traffic_mb * MB if reset_traffic
+                else current_total + add_traffic_mb * MB
             )
         elif reset_traffic:
             client["totalGB"] = 0

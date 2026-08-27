@@ -101,7 +101,7 @@ def duration_view(duration: Duration, packages: list[Package]) -> InlineKeyboard
 
 PKG_FIELDS = [
     ("title", "عنوان"),
-    ("traffic_gb", "حجم (گیگ، ۰=نامحدود)"),
+    ("traffic_mb", "حجم (مگابایت، ۰=نامحدود)"),
     ("price", "قیمت (تومان)"),
     ("device_limit", "تعداد دستگاه (۰=نامحدود)"),
     ("inbound_id", "شماره inbound پنل"),

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Order, Service, ServiceStatus, TrialClaim, User
 from app.services import settings_service as cfg
 from app.services.vpn import VpnError, get_provider
-from app.texts import S_TRIAL_GB, S_TRIAL_DAYS, S_TRIAL_INBOUND
+from app.texts import S_TRIAL_MB, S_TRIAL_DAYS, S_TRIAL_INBOUND
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ async def create_service(
     *,
     user: User,
     days: int,
-    traffic_gb: int,
+    traffic_mb: int,
     inbound_id: int,
     title: str,
     device_limit: int = 0,
@@ -46,7 +46,7 @@ async def create_service(
         inbound_id=inbound_id,
         email=email,
         days=days,
-        traffic_gb=traffic_gb,
+        traffic_mb=traffic_mb,
         device_limit=device_limit,
         telegram_id=user.id,
     )
@@ -64,7 +64,7 @@ async def create_service(
         sub_id=result.sub_id,
         config_link=result.config_link,
         sub_link=result.sub_link,
-        traffic_gb=traffic_gb,
+        traffic_mb=traffic_mb,
         expires_at=expires_at,
         is_trial=is_trial,
         status=ServiceStatus.ACTIVE,
@@ -79,14 +79,14 @@ async def create_service(
 async def grant_trial(session: AsyncSession, user: User) -> Service:
     """تست رایگان - فقط یک‌بار برای هر کاربر."""
     days = await cfg.get_int(session, S_TRIAL_DAYS, 1)
-    traffic_gb = await cfg.get_int(session, S_TRIAL_GB, 1)
+    traffic_mb = await cfg.get_int(session, S_TRIAL_MB, 1024)
     inbound_id = await cfg.get_int(session, S_TRIAL_INBOUND, 1)
 
     service = await create_service(
         session,
         user=user,
         days=days,
-        traffic_gb=traffic_gb,
+        traffic_mb=traffic_mb,
         inbound_id=inbound_id,
         title=f"تست رایگان {days} روزه",
         device_limit=1,
@@ -104,7 +104,7 @@ async def renew_service(
     *,
     service: Service,
     add_days: int,
-    add_traffic_gb: int,
+    add_traffic_mb: int,
     title: str = "",
 ) -> Service:
     """تمدید سرویس موجود روی همان کلاینت پنل."""
@@ -116,7 +116,7 @@ async def renew_service(
         client_uuid=service.client_uuid,
         email=service.email,
         add_days=add_days,
-        add_traffic_gb=add_traffic_gb,
+        add_traffic_mb=add_traffic_mb,
         reset_traffic=reset,
     )
 
@@ -127,9 +127,9 @@ async def renew_service(
     base = current if current and current > now else now
     service.expires_at = base + timedelta(days=add_days) if add_days > 0 else None
 
-    if add_traffic_gb > 0:
-        service.traffic_gb = (
-            add_traffic_gb if reset else service.traffic_gb + add_traffic_gb
+    if add_traffic_mb > 0:
+        service.traffic_mb = (
+            add_traffic_mb if reset else service.traffic_mb + add_traffic_mb
         )
     service.status = ServiceStatus.ACTIVE
     service.expiry_notified = False

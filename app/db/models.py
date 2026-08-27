@@ -99,7 +99,7 @@ class Package(Base):
         ForeignKey("durations.id", ondelete="CASCADE"), index=True
     )
     title: Mapped[str] = mapped_column(String(128))
-    traffic_gb: Mapped[int] = mapped_column(Integer, default=0)  # 0 = نامحدود
+    traffic_mb: Mapped[int] = mapped_column(Integer, default=0)  # مگابایت، 0 = نامحدود
     price: Mapped[int] = mapped_column(BigInteger)  # تومان
     device_limit: Mapped[int] = mapped_column(Integer, default=1)
     inbound_id: Mapped[int] = mapped_column(Integer, default=1)
@@ -128,7 +128,7 @@ class Order(Base):
     # اسنپ‌شات اطلاعات پکیج در لحظه خرید
     amount: Mapped[int] = mapped_column(BigInteger, default=0)
     days: Mapped[int] = mapped_column(Integer, default=0)
-    traffic_gb: Mapped[int] = mapped_column(Integer, default=0)
+    traffic_mb: Mapped[int] = mapped_column(Integer, default=0)
     title: Mapped[str] = mapped_column(String(196), default="")
     points_used: Mapped[int] = mapped_column(Integer, default=0)
 
@@ -164,7 +164,7 @@ class Service(Base):
     config_link: Mapped[str] = mapped_column(Text, default="")
     sub_link: Mapped[str] = mapped_column(Text, default="")
 
-    traffic_gb: Mapped[int] = mapped_column(Integer, default=0)
+    traffic_mb: Mapped[int] = mapped_column(Integer, default=0)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     is_trial: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[ServiceStatus] = mapped_column(

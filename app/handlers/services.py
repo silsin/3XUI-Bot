@@ -42,14 +42,14 @@ async def _user_services(session: AsyncSession, user_id: int) -> list[Service]:
 
 
 def _detail_text(service: Service) -> str:
-    total = service.traffic_gb * (1024 ** 3)
+    total = service.traffic_mb * (1024 ** 2)
     lines = [
         f"🔎 <b>{service.title}</b>",
         "",
         f"وضعیت: {_STATUS_LABEL.get(service.status, '—')}",
         f"⏳ انقضا: <b>{jalali_date(service.expires_at)}</b> "
         f"({days_left_text(service.expires_at)})",
-        f"📊 حجم کل: <b>{traffic(service.traffic_gb)}</b>",
+        f"📊 حجم کل: <b>{traffic(service.traffic_mb)}</b>",
         f"📈 مصرف: {usage_text(service.used_bytes, total)}",
     ]
     if service.sub_link:

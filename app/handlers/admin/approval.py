@@ -65,7 +65,7 @@ async def approve(
                 session,
                 service=service,
                 add_days=order.days,
-                add_traffic_gb=order.traffic_gb,
+                add_traffic_mb=order.traffic_mb,
                 title=order.title,
             )
         else:
@@ -73,7 +73,7 @@ async def approve(
                 session,
                 user=buyer,
                 days=order.days,
-                traffic_gb=order.traffic_gb,
+                traffic_mb=order.traffic_mb,
                 inbound_id=inbound_id,
                 title=order.title,
                 device_limit=device_limit,

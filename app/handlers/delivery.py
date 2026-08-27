@@ -20,7 +20,7 @@ async def send_config(bot: Bot, chat_id: int, service: Service, session) -> None
     text = template.format(
         title=service.title,
         days=days_left_text(service.expires_at),
-        traffic=traffic(service.traffic_gb),
+        traffic=traffic(service.traffic_mb),
         link=service.config_link,
     )
     await bot.send_message(chat_id, text, disable_web_page_preview=True)

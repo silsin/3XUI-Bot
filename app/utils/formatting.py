@@ -22,8 +22,15 @@ def money(amount: int) -> str:
     return fa_digits(f"{int(amount):,}").replace(",", "٬")
 
 
-def traffic(gb: int) -> str:
-    return "نامحدود" if gb <= 0 else f"{fa_digits(gb)} گیگابایت"
+def traffic(mb: int) -> str:
+    """حجم بر حسب مگابایت؛ زیر ۱ گیگ مگابایت، بالاتر گیگابایت. ۰ = نامحدود."""
+    if mb <= 0:
+        return "نامحدود"
+    if mb < 1024:
+        return f"{fa_digits(mb)} مگابایت"
+    gb = mb / 1024
+    text = str(int(gb)) if gb == int(gb) else f"{gb:.1f}".rstrip("0").rstrip(".")
+    return f"{fa_digits(text)} گیگابایت"
 
 
 def human_bytes(size: int) -> str:

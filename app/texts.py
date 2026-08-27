@@ -31,7 +31,7 @@ S_INVITE_TEXT = "invite_text"
 S_POINTS_TEXT = "points_text"
 S_TRIAL_ENABLED = "trial_enabled"
 S_TRIAL_DAYS = "trial_days"
-S_TRIAL_GB = "trial_gb"
+S_TRIAL_MB = "trial_mb"
 S_TRIAL_INBOUND = "trial_inbound_id"
 S_REFERRAL_POINTS = "referral_points"
 S_POINTS_PER_DAY = "points_per_day"
@@ -96,7 +96,7 @@ DEFAULT_SETTINGS: dict[str, str] = {
     ),
     S_TRIAL_ENABLED: "1",
     S_TRIAL_DAYS: "1",
-    S_TRIAL_GB: "1",
+    S_TRIAL_MB: "1024",
     S_TRIAL_INBOUND: "4",
     S_REFERRAL_POINTS: "10",
     S_POINTS_PER_DAY: "10",

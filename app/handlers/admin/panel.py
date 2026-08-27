@@ -41,12 +41,12 @@ from app.texts import (
     S_SUPPORT_TEXT,
     S_TRIAL_DAYS,
     S_TRIAL_ENABLED,
-    S_TRIAL_GB,
+    S_TRIAL_MB,
     S_TRIAL_INBOUND,
     S_WELCOME_IMAGE,
     S_WELCOME_TEXT,
 )
-from app.utils.formatting import fa_digits, money
+from app.utils.formatting import fa_digits, money, traffic
 
 logger = logging.getLogger(__name__)
 router = Router(name="admin_panel")
@@ -65,7 +65,7 @@ TEXT_FIELDS = [
 PAYMENT_FIELDS = [(S_CARD_NUMBER, "شماره کارت"), (S_CARD_HOLDER, "نام صاحب کارت")]
 TRIAL_NUM_FIELDS = [
     (S_TRIAL_DAYS, "مدت تست (روز)"),
-    (S_TRIAL_GB, "حجم تست (گیگ)"),
+    (S_TRIAL_MB, "حجم تست (مگابایت)"),
     (S_TRIAL_INBOUND, "شماره inbound تست"),
 ]
 POINTS_FIELDS = [
@@ -74,7 +74,7 @@ POINTS_FIELDS = [
     (S_REDEEM_INBOUND, "شماره inbound اشتراک هدیه"),
 ]
 NUMERIC_KEYS = {
-    S_TRIAL_DAYS, S_TRIAL_GB, S_TRIAL_INBOUND,
+    S_TRIAL_DAYS, S_TRIAL_MB, S_TRIAL_INBOUND,
     S_REFERRAL_POINTS, S_POINTS_PER_DAY, S_REDEEM_INBOUND,
 }
 
@@ -124,12 +124,12 @@ async def show_payment(call: CallbackQuery, session: AsyncSession) -> None:
 async def show_trial(call: CallbackQuery, session: AsyncSession) -> None:
     enabled = await cfg.get_bool(session, S_TRIAL_ENABLED, True)
     days = await cfg.get_int(session, S_TRIAL_DAYS, 1)
-    gb = await cfg.get_int(session, S_TRIAL_GB, 1)
+    mb = await cfg.get_int(session, S_TRIAL_MB, 1024)
     inbound = await cfg.get_int(session, S_TRIAL_INBOUND, 1)
     text = (
         f"🎁 <b>تست رایگان</b>\n"
         f"وضعیت: {'🟢 فعال' if enabled else '🔴 غیرفعال'}\n"
-        f"مدت: {fa_digits(days)} روز | حجم: {fa_digits(gb)} گیگ | inbound: {fa_digits(inbound)}"
+        f"مدت: {fa_digits(days)} روز | حجم: {traffic(mb)} | inbound: {fa_digits(inbound)}"
     )
     markup = kb.edit_list(TRIAL_NUM_FIELDS)
     # افزودن دکمه toggle به بالای لیست
@@ -372,7 +372,7 @@ async def package_add(
     package = Package(
         duration_id=duration.id,
         title="پکیج جدید",
-        traffic_gb=0,
+        traffic_mb=0,
         price=0,
         device_limit=1,
         inbound_id=inbound_id,
@@ -388,7 +388,7 @@ async def package_add(
 async def _render_package(call: CallbackQuery, session: AsyncSession, package: Package) -> None:
     text = (
         f"📦 <b>{package.title}</b>\n"
-        f"حجم: {fa_digits(package.traffic_gb)} گیگ (۰=نامحدود)\n"
+        f"حجم: {traffic(package.traffic_mb)} (۰=نامحدود)\n"
         f"قیمت: {money(package.price)} تومان\n"
         f"دستگاه: {fa_digits(package.device_limit)}\n"
         f"inbound: {fa_digits(package.inbound_id)}\n"
@@ -436,7 +436,7 @@ async def package_edit_save(
         return
 
     value = (message.text or "").strip()
-    numeric = {"traffic_gb", "price", "device_limit", "inbound_id"}
+    numeric = {"traffic_mb", "price", "device_limit", "inbound_id"}
     if field in numeric:
         if not value.isdigit():
             await message.answer("⚠️ لطفاً فقط عدد بفرستید.")

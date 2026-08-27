@@ -39,7 +39,7 @@ from app.texts import (
     S_CARD_HOLDER,
     S_CARD_NUMBER,
 )
-from app.utils.formatting import days_left_text, money
+from app.utils.formatting import days_left_text, money, traffic
 
 logger = logging.getLogger(__name__)
 router = Router(name="buy")
@@ -207,7 +207,7 @@ async def create_order(
         status=OrderStatus.AWAITING_RECEIPT,
         amount=package.price,
         days=duration.days,
-        traffic_gb=package.traffic_gb,
+        traffic_mb=package.traffic_mb,
         title=f"{package.title} — {duration.title}",
     )
     session.add(order)
@@ -308,8 +308,7 @@ async def _notify_admin(
         f"👤 کاربر: {user.first_name or ''} ({uname})\n"
         f"🆔 <code>{user.id}</code>\n"
         f"📦 {order.title}\n"
-        f"⏱ {order.days} روز | 📊 "
-        f"{'نامحدود' if order.traffic_gb == 0 else str(order.traffic_gb) + ' گیگ'}\n"
+        f"⏱ {order.days} روز | 📊 {traffic(order.traffic_mb)}\n"
         f"💰 مبلغ: <b>{money(order.amount)} تومان</b>"
     )
     markup = inline.receipt_review_kb(order.id)

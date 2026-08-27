@@ -67,7 +67,7 @@ async def redeem_points(
             session,
             user=user,
             days=days,
-            traffic_gb=0,
+            traffic_mb=0,
             inbound_id=inbound_id,
             title=f"اشتراک هدیه {fa_digits(days)} روزه",
             device_limit=1,

@@ -45,7 +45,7 @@ class VpnProvider(Protocol):
         inbound_id: int,
         email: str,
         days: int,
-        traffic_gb: int,
+        traffic_mb: int,
         device_limit: int = 0,
         telegram_id: int | None = None,
     ) -> ProvisionResult: ...
@@ -56,7 +56,7 @@ class VpnProvider(Protocol):
         client_uuid: str,
         email: str,
         add_days: int,
-        add_traffic_gb: int,
+        add_traffic_mb: int,
         reset_traffic: bool = False,
     ) -> None: ...
 

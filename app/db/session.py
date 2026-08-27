@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -42,9 +43,44 @@ def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
     return _sessionmaker
 
 
+def _migrate_gb_to_mb(conn) -> None:
+    """مهاجرت ستون traffic_gb (گیگ) به traffic_mb (مگابایت) در دیتابیس موجود."""
+    inspector = inspect(conn)
+    tables = set(inspector.get_table_names())
+    for table in ("packages", "orders", "services"):
+        if table not in tables:
+            continue
+        cols = {c["name"] for c in inspector.get_columns(table)}
+        if "traffic_gb" in cols and "traffic_mb" not in cols:
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN traffic_mb INTEGER DEFAULT 0"))
+            conn.execute(text(f"UPDATE {table} SET traffic_mb = traffic_gb * 1024"))
+    # مهاجرت کلید تنظیمات trial_gb -> trial_mb
+    if "settings" in tables:
+        row = conn.execute(
+            text("SELECT value FROM settings WHERE key='trial_gb'")
+        ).fetchone()
+        if row is not None:
+            exists = conn.execute(
+                text("SELECT 1 FROM settings WHERE key='trial_mb'")
+            ).fetchone()
+            if exists is None:
+                try:
+                    mb = int(str(row[0]).strip()) * 1024
+                except (TypeError, ValueError):
+                    mb = 1024
+                conn.execute(
+                    text(
+                        "INSERT INTO settings (key, value, updated_at) "
+                        "VALUES ('trial_mb', :v, CURRENT_TIMESTAMP)"
+                    ),
+                    {"v": str(mb)},
+                )
+
+
 async def init_db() -> None:
     engine = get_engine()
     async with engine.begin() as conn:
+        await conn.run_sync(_migrate_gb_to_mb)
         await conn.run_sync(Base.metadata.create_all)
 
 
