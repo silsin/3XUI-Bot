@@ -8,6 +8,7 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramUnauthorizedError
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand
 
@@ -58,11 +59,18 @@ async def main() -> None:
     scheduler = setup_scheduler(bot, settings.timezone)
     scheduler.start()
 
-    await _set_commands(bot)
-    logger.info("bot starting; admins=%s", settings.admin_ids)
-
     try:
+        # اولین تماس با تلگرام؛ اعتبار توکن اینجا مشخص می‌شود
+        me = await bot.get_me()
+        logger.info("logged in as @%s (id=%s)", me.username, me.id)
+        await _set_commands(bot)
+        logger.info("bot starting; admins=%s", settings.admin_ids)
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+    except TelegramUnauthorizedError:
+        logger.error(
+            "❌ توکن ربات نامعتبر است. مقدار BOT_TOKEN را در فایل .env بررسی کنید "
+            "و دوباره اجرا کنید. (توکن را از @BotFather بگیرید)"
+        )
     finally:
         scheduler.shutdown(wait=False)
         await close_provider()

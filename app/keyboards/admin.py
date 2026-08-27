@@ -13,7 +13,8 @@ class AdminCB(CallbackData, prefix="adm"):
     action: str
     arg: int = 0
     arg2: int = 0
-    field: str = ""
+    # باید Optional باشد؛ رشته خالی هنگام unpack به None تبدیل می‌شود
+    field: str | None = None
 
 
 def home() -> InlineKeyboardMarkup:

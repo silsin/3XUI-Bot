@@ -348,6 +348,18 @@ async def duration_del_yes(
     await _render_durations(call, session)
 
 
+async def _default_inbound_id(session: AsyncSession) -> int:
+    """اولین inbound قابل استفاده پنل؛ در صورت خطا، inbound تنظیم‌شده تست."""
+    usable = {"vmess", "vless", "trojan", "shadowsocks"}
+    try:
+        for ib in await get_provider().list_inbounds():
+            if ib.get("enable", True) and (ib.get("protocol") or "").lower() in usable:
+                return int(ib.get("id"))
+    except Exception:  # noqa: BLE001 — پنل در دسترس نبود
+        logger.warning("could not auto-detect inbound; using trial inbound")
+    return await cfg.get_int(session, S_TRIAL_INBOUND, 1)
+
+
 @router.callback_query(kb.AdminCB.filter(F.action == "pkg_add"))
 async def package_add(
     call: CallbackQuery, callback_data: kb.AdminCB, session: AsyncSession
@@ -356,19 +368,20 @@ async def package_add(
     if duration is None:
         await call.answer("مدت یافت نشد.", show_alert=True)
         return
+    inbound_id = await _default_inbound_id(session)
     package = Package(
         duration_id=duration.id,
         title="پکیج جدید",
         traffic_gb=0,
         price=0,
         device_limit=1,
-        inbound_id=1,
-        is_active=False,
+        inbound_id=inbound_id,
+        is_active=True,
     )
     session.add(package)
     await session.commit()
     await session.refresh(package)
-    await call.answer("پکیج ساخته شد؛ مقادیر را ویرایش کنید.")
+    await call.answer("پکیج ساخته شد؛ عنوان و قیمت را ویرایش کنید.")
     await _render_package(call, session, package)
 
 

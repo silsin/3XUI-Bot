@@ -97,10 +97,10 @@ DEFAULT_SETTINGS: dict[str, str] = {
     S_TRIAL_ENABLED: "1",
     S_TRIAL_DAYS: "1",
     S_TRIAL_GB: "1",
-    S_TRIAL_INBOUND: "1",
+    S_TRIAL_INBOUND: "4",
     S_REFERRAL_POINTS: "10",
     S_POINTS_PER_DAY: "10",
-    S_REDEEM_INBOUND: "1",
+    S_REDEEM_INBOUND: "4",
     S_REDEEM_MIN_DAYS: "1",
     S_CONFIG_CAPTION: (
         "✅ <b>سرویس شما آماده است</b>\n\n"

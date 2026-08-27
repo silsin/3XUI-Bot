@@ -27,6 +27,8 @@ class Settings(BaseSettings):
         default="sqlite+aiosqlite:///./data/bot.db", alias="DATABASE_URL"
     )
 
+    # legacy = x-ui 1.x (vaxilu) ، panel = 3x-ui (MHSanaei)
+    xui_variant: str = Field(default="legacy", alias="XUI_VARIANT")
     xui_base_url: str = Field(default="", alias="XUI_BASE_URL")
     xui_web_base_path: str = Field(default="", alias="XUI_WEB_BASE_PATH")
     xui_username: str = Field(default="", alias="XUI_USERNAME")
