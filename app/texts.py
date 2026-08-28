@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 # ---------- دکمه‌های کیبورد پایین ----------
-# ایموجی‌های رنگی برای ظاهر بهتر؛ متن هندلرها از همین ثابت‌ها استفاده می‌کند
-BTN_TRIAL = "🎁 تست رایگان"
-BTN_BUY = "🛒 خرید اشتراک"
-BTN_RENEW = "♻️ تمدید سرویس"
-BTN_MY_SERVICES = "📊 سرویس های من"
-BTN_POINTS = "🏅 امتیاز من"
-BTN_GUIDE = "📚 آموزش استفاده"
-BTN_INVITE = "👥 دعوت از دوستان"
-BTN_SUPPORT = "☎️ پشتیبانی"
+BTN_TRIAL = "تست رایگان"
+BTN_BUY = "خرید اشتراک"
+BTN_RENEW = "تمدید سرویس"
+BTN_MY_SERVICES = "سرویس های من"
+BTN_POINTS = "امتیاز من"
+BTN_GUIDE = "آموزش استفاده"
+BTN_INVITE = "دعوت از دوستان"
+BTN_SUPPORT = "پشتیبانی"
 
 MAIN_BUTTONS = [
     [BTN_TRIAL, BTN_BUY],
