@@ -22,6 +22,18 @@ def money(amount: int) -> str:
     return fa_digits(f"{int(amount):,}").replace(",", "٬")
 
 
+def toman_short(amount: int) -> str:
+    """نمایش خوانا: ۲۰۰ هزار تومان / ۲ میلیون تومان / ۲۵٬۵۰۰ تومان"""
+    amount = int(amount)
+    if amount <= 0:
+        return "۰ تومان"
+    if amount % 1_000_000 == 0:
+        return f"{fa_digits(amount // 1_000_000)} میلیون تومان"
+    if amount % 1000 == 0:
+        return f"{fa_digits(amount // 1000)} هزار تومان"
+    return f"{money(amount)} تومان"
+
+
 def traffic(mb: int) -> str:
     """حجم بر حسب مگابایت؛ زیر ۱ گیگ مگابایت، بالاتر گیگابایت. ۰ = نامحدود."""
     if mb <= 0:

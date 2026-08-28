@@ -17,7 +17,7 @@ from app.texts import (
     BTN_REJECT,
     BTN_SEND_RECEIPT,
 )
-from app.utils.formatting import days_left_text, fa_digits, money, traffic
+from app.utils.formatting import days_left_text, fa_digits, money, toman_short, traffic
 
 
 class BuyCB(CallbackData, prefix="buy"):
@@ -124,12 +124,12 @@ def payment_kb(
     copy_row = 0
     if card_digits:
         builder.button(
-            text="📋 کپی شماره کارت", copy_text=CopyTextButton(text=card_digits)
+            text="کپی شماره کارت", copy_text=CopyTextButton(text=card_digits)
         )
         copy_row += 1
     if amount:
         builder.button(
-            text="📋 کپی مبلغ", copy_text=CopyTextButton(text=str(int(amount)))
+            text=toman_short(amount), copy_text=CopyTextButton(text=str(int(amount)))
         )
         copy_row += 1
     if copy_row:
