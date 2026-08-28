@@ -12,6 +12,7 @@ from app.keyboards import inline
 from app.services import provisioning
 from app.texts import BTN_MY_SERVICES, MSG_NO_SERVICES
 from app.utils.formatting import (
+    days_left,
     days_left_text,
     fa_digits,
     jalali_date,
@@ -27,6 +28,19 @@ _STATUS_LABEL = {
     ServiceStatus.EXPIRED: "🔴 منقضی",
     ServiceStatus.DISABLED: "⛔️ غیرفعال",
 }
+
+
+def _is_expired(service: Service) -> bool:
+    """انقضا را بلادرنگ از روی تاریخ می‌سنجد (مستقل از همگام‌سازی زمان‌بند)."""
+    if service.status is ServiceStatus.EXPIRED:
+        return True
+    if service.expires_at is None:  # نامحدود
+        return False
+    return days_left(service.expires_at) == 0
+
+
+def _effective_status(service: Service) -> ServiceStatus:
+    return ServiceStatus.EXPIRED if _is_expired(service) else service.status
 
 
 async def _user_services(session: AsyncSession, user_id: int) -> list[Service]:
@@ -46,7 +60,7 @@ def _detail_text(service: Service) -> str:
     lines = [
         f"🔎 <b>{service.title}</b>",
         "",
-        f"وضعیت: {_STATUS_LABEL.get(service.status, '—')}",
+        f"وضعیت: {_STATUS_LABEL.get(_effective_status(service), '—')}",
         f"⏳ انقضا: <b>{jalali_date(service.expires_at)}</b> "
         f"({days_left_text(service.expires_at)})",
         f"📊 حجم کل: <b>{traffic(service.traffic_mb)}</b>",
@@ -58,6 +72,11 @@ def _detail_text(service: Service) -> str:
     return "\n".join(lines)
 
 
+def _split_active(services: list[Service]) -> tuple[list[Service], int]:
+    active = [s for s in services if not _is_expired(s)]
+    return active, len(services) - len(active)
+
+
 @router.message(F.text == BTN_MY_SERVICES)
 async def my_services(message: Message, session: AsyncSession, user: User) -> None:
     services = await _user_services(session, user.id)
@@ -65,13 +84,19 @@ async def my_services(message: Message, session: AsyncSession, user: User) -> No
         await message.answer(MSG_NO_SERVICES)
         return
 
-    active = sum(1 for s in services if s.status is ServiceStatus.ACTIVE)
-    header = (
-        f"📋 <b>سرویس‌های شما</b>\n"
-        f"تعداد کل: {fa_digits(len(services))} | فعال: {fa_digits(active)}\n\n"
-        "برای مشاهده جزئیات هر سرویس روی آن بزنید:"
-    )
-    await message.answer(header, reply_markup=inline.services_kb(services))
+    active, expired = _split_active(services)
+    if not active:
+        await message.answer(
+            "🔴 همه سرویس‌های شما منقضی شده‌اند.\n"
+            "برای تمدید از «♻️ تمدید سرویس» استفاده کنید."
+        )
+        return
+
+    header = f"📋 <b>سرویس‌های فعال شما</b>\nتعداد: {fa_digits(len(active))}"
+    if expired:
+        header += f" | منقضی: {fa_digits(expired)} (از «♻️ تمدید سرویس» تمدید کنید)"
+    header += "\n\nبرای مشاهده جزئیات هر سرویس روی آن بزنید:"
+    await message.answer(header, reply_markup=inline.services_kb(active))
 
 
 @router.callback_query(inline.ServiceCB.filter(F.action == "list"))
@@ -79,13 +104,16 @@ async def back_to_list(
     call: CallbackQuery, session: AsyncSession, user: User
 ) -> None:
     services = await _user_services(session, user.id)
-    if not services:
-        await call.message.edit_text(MSG_NO_SERVICES)
+    active, _ = _split_active(services)
+    if not active:
+        await call.message.edit_text(
+            "🔴 سرویس فعالی ندارید. برای تمدید از «♻️ تمدید سرویس» استفاده کنید."
+        )
         await call.answer()
         return
     await call.message.edit_text(
-        "📋 <b>سرویس‌های شما</b>\nبرای جزئیات روی هر سرویس بزنید:",
-        reply_markup=inline.services_kb(services),
+        "📋 <b>سرویس‌های فعال شما</b>\nبرای جزئیات روی هر سرویس بزنید:",
+        reply_markup=inline.services_kb(active),
     )
     await call.answer()
 
