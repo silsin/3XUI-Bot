@@ -215,14 +215,15 @@ async def create_order(
     await session.commit()
     await session.refresh(order)
 
+    card_number = await cfg.get(session, S_CARD_NUMBER)
     instruction = (await cfg.get(session, S_BUY_INSTRUCTION)).format(
         amount=money(package.price),
-        card_number=await cfg.get(session, S_CARD_NUMBER),
+        card_number=card_number,
         card_holder=await cfg.get(session, S_CARD_HOLDER),
     )
     await call.message.edit_text(
         instruction,
-        reply_markup=inline.payment_kb(order.id),
+        reply_markup=inline.payment_kb(order.id, card_number, package.price),
         disable_web_page_preview=True,
     )
     await call.answer()

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from aiogram.filters.callback_data import CallbackData
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (
+    CopyTextButton,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.db.models import Duration, Package, Service
@@ -109,13 +113,32 @@ def checkout_kb(
     return builder.as_markup()
 
 
-def payment_kb(order_id: int) -> InlineKeyboardMarkup:
+def payment_kb(
+    order_id: int, card_number: str = "", amount: int = 0
+) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(
-        text=BTN_SEND_RECEIPT, callback_data=f"receipt:start:{order_id}"
-    )
+    rows: list[int] = []
+
+    # دکمه‌های «کپی» بومی تلگرام (tap-to-copy)
+    card_digits = "".join(ch for ch in card_number if ch.isdigit())
+    copy_row = 0
+    if card_digits:
+        builder.button(
+            text="📋 کپی شماره کارت", copy_text=CopyTextButton(text=card_digits)
+        )
+        copy_row += 1
+    if amount:
+        builder.button(
+            text="📋 کپی مبلغ", copy_text=CopyTextButton(text=str(int(amount)))
+        )
+        copy_row += 1
+    if copy_row:
+        rows.append(copy_row)
+
+    builder.button(text=BTN_SEND_RECEIPT, callback_data=f"receipt:start:{order_id}")
     builder.button(text=BTN_CANCEL, callback_data=f"receipt:cancel:{order_id}")
-    builder.adjust(1)
+    rows += [1, 1]
+    builder.adjust(*rows)
     return builder.as_markup()
 
 
