@@ -17,6 +17,14 @@ def fa_digits(value: object) -> str:
     return str(value).translate(_FA_DIGITS)
 
 
+def render(template: str, /, **values: object) -> str:
+    """جایگزینی امن placeholderها بدون خطا؛ براکت‌های اضافی متن ادمین را نمی‌شکند."""
+    out = template
+    for key, val in values.items():
+        out = out.replace("{" + key + "}", str(val))
+    return out
+
+
 def money(amount: int) -> str:
     """۱۲۳٬۰۰۰ تومان"""
     return fa_digits(f"{int(amount):,}").replace(",", "٬")

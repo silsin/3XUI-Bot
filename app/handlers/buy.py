@@ -40,7 +40,7 @@ from app.texts import (
     S_CARD_HOLDER,
     S_CARD_NUMBER,
 )
-from app.utils.formatting import days_left_text, money, traffic
+from app.utils.formatting import days_left_text, money, render, traffic
 
 logger = logging.getLogger(__name__)
 router = Router(name="buy")
@@ -216,7 +216,8 @@ async def create_order(
     await session.refresh(order)
 
     card_number = await cfg.get(session, S_CARD_NUMBER)
-    instruction = (await cfg.get(session, S_BUY_INSTRUCTION)).format(
+    instruction = render(
+        await cfg.get(session, S_BUY_INSTRUCTION),
         amount=money(package.price),
         card_number=card_number,
         card_holder=await cfg.get(session, S_CARD_HOLDER),

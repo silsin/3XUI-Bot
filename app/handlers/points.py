@@ -24,7 +24,7 @@ from app.texts import (
     S_REDEEM_INBOUND,
     S_REFERRAL_POINTS,
 )
-from app.utils.formatting import fa_digits
+from app.utils.formatting import fa_digits, render
 
 logger = logging.getLogger(__name__)
 router = Router(name="points")
@@ -34,7 +34,8 @@ router = Router(name="points")
 async def my_points(message: Message, session: AsyncSession, user: User) -> None:
     per_day = await cfg.get_int(session, S_POINTS_PER_DAY, 10)
     days = await pts.points_to_days(session, user.points)
-    text = (await cfg.get(session, S_POINTS_TEXT)).format(
+    text = render(
+        await cfg.get(session, S_POINTS_TEXT),
         points=fa_digits(user.points),
         per_day=fa_digits(per_day),
         days=fa_digits(days),
@@ -93,7 +94,8 @@ async def invite(message: Message, session: AsyncSession, user: User) -> None:
     points = await cfg.get_int(session, S_REFERRAL_POINTS, 10)
     invited = await pts.count_successful_referrals(session, user.id)
 
-    text = (await cfg.get(session, S_INVITE_TEXT)).format(
+    text = render(
+        await cfg.get(session, S_INVITE_TEXT),
         points=fa_digits(points),
         link=link,
         invited=fa_digits(invited),

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import User
 from app.keyboards import reply
 from app.services import settings_service as cfg
+from app.utils.formatting import render
 from app.texts import (
     MSG_CANCELLED,
     MSG_UNKNOWN,
@@ -58,8 +59,8 @@ async def cmd_start(
     await state.clear()
     await _apply_referral(session, user, command)
 
-    text = (await cfg.get(session, S_WELCOME_TEXT)).format(
-        name=user.first_name or "کاربر"
+    text = render(
+        await cfg.get(session, S_WELCOME_TEXT), name=user.first_name or "کاربر"
     )
     image = await cfg.get(session, S_WELCOME_IMAGE)
     markup = reply.main_menu(is_admin=is_admin)

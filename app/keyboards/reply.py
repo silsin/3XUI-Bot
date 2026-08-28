@@ -15,9 +15,10 @@ def main_menu(is_admin: bool = False) -> ReplyKeyboardMarkup:
         builder.row(*(KeyboardButton(text=text) for text in row))
     if is_admin:
         builder.row(KeyboardButton(text=ADMIN_BUTTON))
+    # is_persistent عمداً تنظیم نمی‌شود؛ کیبورد پایدار روی اندروید دکمه بازگشت
+    # فیزیکی را می‌بلعد. حالت پیش‌فرض اجازه می‌دهد کاربر کیبورد را ببندد.
     return builder.as_markup(
         resize_keyboard=True,
-        is_persistent=True,
         input_field_placeholder="یک گزینه را انتخاب کنید...",
     )
 
