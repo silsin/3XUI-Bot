@@ -51,9 +51,19 @@ def _migrate_gb_to_mb(conn) -> None:
         if table not in tables:
             continue
         cols = {c["name"] for c in inspector.get_columns(table)}
-        if "traffic_gb" in cols and "traffic_mb" not in cols:
+        if "traffic_gb" not in cols:
+            continue
+        if "traffic_mb" not in cols:
             conn.execute(text(f"ALTER TABLE {table} ADD COLUMN traffic_mb INTEGER DEFAULT 0"))
             conn.execute(text(f"UPDATE {table} SET traffic_mb = traffic_gb * 1024"))
+        else:
+            # پرکردن مقادیری که در مهاجرت ناقص قبلی صفر مانده‌اند
+            conn.execute(
+                text(f"UPDATE {table} SET traffic_mb = traffic_gb * 1024 "
+                     "WHERE traffic_mb = 0 AND traffic_gb > 0")
+            )
+        # حذف ستون قدیمی traffic_gb (NOT NULL) تا insert جدید نشکند
+        conn.execute(text(f"ALTER TABLE {table} DROP COLUMN traffic_gb"))
     # ستون notify_msgs برای پیگیری پیام رسید همه ادمین‌ها
     if "orders" in tables:
         ocols = {c["name"] for c in inspector.get_columns("orders")}
