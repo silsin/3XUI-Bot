@@ -59,6 +59,13 @@ async def main() -> None:
     scheduler = setup_scheduler(bot, settings.timezone)
     scheduler.start()
 
+    web_runner = None
+    if settings.sub_public_url:
+        from app.web import start_web
+
+        # پورت داخلی ثابت است؛ نگاشت پورت میزبان در docker-compose انجام می‌شود
+        web_runner = await start_web("0.0.0.0", 8080)
+
     try:
         # اولین تماس با تلگرام؛ اعتبار توکن اینجا مشخص می‌شود
         me = await bot.get_me()
@@ -73,6 +80,8 @@ async def main() -> None:
         )
     finally:
         scheduler.shutdown(wait=False)
+        if web_runner is not None:
+            await web_runner.cleanup()
         await close_provider()
         await dispose_db()
         await bot.session.close()

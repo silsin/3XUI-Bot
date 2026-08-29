@@ -9,6 +9,9 @@ services:
     environment:
       # منطقه زمانی کانتینر (برای زمان‌بند و لاگ‌ها)
       TZ: ${TIMEZONE:-Asia/Tehran}
+    ports:
+      # سرور اشتراک داخلی ربات
+      - "${SUB_PORT:-8080}:8080"
     volumes:
       # ولوم نام‌دار: مستقل از یوزر هاست، توسط appuser قابل نوشتن است
       - bot_data:/app/data

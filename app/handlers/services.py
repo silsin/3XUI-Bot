@@ -3,11 +3,12 @@ from __future__ import annotations
 import logging
 
 from aiogram import F, Router
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import BufferedInputFile, CallbackQuery, Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import get_settings
 from app.db.models import Service, ServiceClient, ServiceStatus, User
 from app.keyboards import inline
 from app.services import provisioning
@@ -20,6 +21,15 @@ from app.utils.formatting import (
     traffic,
     usage_text,
 )
+from app.utils.qr import make_qr_png
+
+
+def sub_link_for(service: Service) -> str:
+    """لینک اشتراک ربات برای این سرویس (همه پروتکل‌ها)."""
+    base = get_settings().sub_public_url
+    if base and service.sub_id:
+        return f"{base.rstrip('/')}/sub/{service.sub_id}"
+    return service.sub_link or ""
 
 logger = logging.getLogger(__name__)
 router = Router(name="services")
@@ -77,13 +87,16 @@ def _detail_text(service: Service) -> str:
         f"📊 حجم کل: <b>{traffic(service.traffic_mb)}</b>",
         f"📈 مصرف: {usage_text(service.used_bytes, total)}",
     ]
-    if service.sub_link:
-        lines.append(f"\n🔗 لینک اشتراک:\n<code>{service.sub_link}</code>")
+    sub = sub_link_for(service)
+    if sub:
+        lines.append(
+            f"\n🔗 <b>لینک اشتراک (همه پروتکل‌ها):</b>\n<code>{sub}</code>"
+        )
 
     clients = sorted(service.clients, key=lambda c: c.id)
     if clients:
         lines.append(
-            "\n🔐 برای دریافت هر کانفیگ روی دکمه‌ی آن بزنید. "
+            "\n🔐 برای دریافت کانفیگ یا QR هر پروتکل روی دکمه‌ی آن بزنید. "
             "اگر یکی وصل نشد، دیگری را امتحان کنید."
         )
     elif service.config_link:
@@ -179,9 +192,12 @@ async def send_single_config(
 
     label = client.label or (client.protocol or "config").upper()
     link = client.config_link
+    if not link:
+        await call.answer("کانفیگ خالی است.", show_alert=True)
+        return
     markup = None
     # دکمه کپی بومی فقط اگر در محدودیت ۲۵۶ کاراکتری تلگرام جا شود (vless/trojan)
-    if link and len(link) <= 256:
+    if len(link) <= 256:
         from aiogram.types import CopyTextButton, InlineKeyboardButton, InlineKeyboardMarkup
 
         markup = InlineKeyboardMarkup(
@@ -192,10 +208,39 @@ async def send_single_config(
             ]]
         )
     await call.answer()
-    await call.message.answer(
-        f"🔐 <b>{label}</b>\n<code>{link}</code>",
+    # عکس QR + متن قابل کپی
+    qr = BufferedInputFile(make_qr_png(link), filename=f"{label}.png")
+    await call.message.answer_photo(
+        qr,
+        caption=f"🔐 <b>{label}</b>\n<code>{link}</code>",
         reply_markup=markup,
-        disable_web_page_preview=True,
+    )
+
+
+@router.callback_query(inline.ServiceCB.filter(F.action == "sub"))
+async def send_sub_link(
+    call: CallbackQuery,
+    callback_data: inline.ServiceCB,
+    session: AsyncSession,
+    user: User,
+) -> None:
+    service = await session.get(Service, callback_data.service_id)
+    if service is None or service.user_id != user.id:
+        await call.answer("سرویس یافت نشد.", show_alert=True)
+        return
+    sub = sub_link_for(service)
+    if not sub:
+        await call.answer("لینک اشتراک فعال نیست.", show_alert=True)
+        return
+    await call.answer()
+    qr = BufferedInputFile(make_qr_png(sub), filename="subscription.png")
+    await call.message.answer_photo(
+        qr,
+        caption=(
+            "🔗 <b>لینک اشتراک (همه پروتکل‌ها)</b>\n"
+            "این لینک را در نرم‌افزار به‌عنوان Subscription اضافه کنید:\n"
+            f"<code>{sub}</code>"
+        ),
     )
 
 

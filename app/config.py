@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     xui_sub_base_url: str = Field(default="", alias="XUI_SUB_BASE_URL")
     xui_verify_ssl: bool = Field(default=False, alias="XUI_VERIFY_SSL")
 
+    # سرور اشتراک داخلی ربات (base64 همه کانفیگ‌های یک سرویس)
+    sub_port: int = Field(default=8080, alias="SUB_PORT")
+    sub_public_url: str = Field(default="", alias="SUB_PUBLIC_URL")
+
     timezone: str = Field(default="Asia/Tehran", alias="TIMEZONE")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 

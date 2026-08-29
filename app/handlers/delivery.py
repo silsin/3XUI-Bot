@@ -48,9 +48,13 @@ async def send_config(bot: Bot, chat_id: int, service: Service, session) -> None
             chat_id, "\n".join(lines), disable_web_page_preview=True
         )
 
-    if svc.sub_link:
+    from app.handlers.services import sub_link_for
+
+    sub = sub_link_for(svc)
+    if sub:
         await bot.send_message(
             chat_id,
-            f"🔗 لینک اشتراک (Subscription):\n<code>{svc.sub_link}</code>",
+            "🔗 <b>لینک اشتراک (همه پروتکل‌ها)</b>:\n"
+            f"<code>{sub}</code>",
             disable_web_page_preview=True,
         )

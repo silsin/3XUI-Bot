@@ -174,6 +174,16 @@ def service_detail_kb(service: Service) -> InlineKeyboardMarkup:
         full = len(clients) // 2
         cfg_rows = [2] * full + ([1] if len(clients) % 2 else [])
 
+    from app.config import get_settings
+
+    extra_rows: list[int] = []
+    if get_settings().sub_public_url and getattr(service, "sub_id", ""):
+        builder.button(
+            text="🔗 لینک اشتراک + QR",
+            callback_data=ServiceCB(action="sub", service_id=service.id),
+        )
+        extra_rows.append(1)
+
     builder.button(
         text="🔄 به‌روزرسانی مصرف",
         callback_data=ServiceCB(action="refresh", service_id=service.id),
@@ -185,7 +195,7 @@ def service_detail_kb(service: Service) -> InlineKeyboardMarkup:
     builder.button(
         text=BTN_BACK, callback_data=ServiceCB(action="list", service_id=0)
     )
-    builder.adjust(*cfg_rows, 1, 1, 1)
+    builder.adjust(*cfg_rows, *extra_rows, 1, 1, 1)
     return builder.as_markup()
 
 
