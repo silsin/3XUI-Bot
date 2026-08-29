@@ -200,6 +200,14 @@ class XuiLegacyClient:
             remark=remark,
         )
 
+    async def build_client_link(
+        self, inbound_id: int, client_uuid: str, email: str
+    ) -> str:
+        """لینک را از روی کلاینت موجود پنل بازسازی می‌کند (بدون ساخت مجدد)."""
+        inbound = await self.get_inbound(inbound_id)
+        client = self._find_client(inbound, client_uuid, email)
+        return self._build_link(inbound, client, email)
+
     def _find_client(self, inbound: dict, client_uuid: str, email: str) -> dict:
         clients = _loads(inbound.get("settings")).get("clients") or []
         for item in clients:

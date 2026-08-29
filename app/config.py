@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     # سرور اشتراک داخلی ربات (base64 همه کانفیگ‌های یک سرویس)
     sub_port: int = Field(default=8080, alias="SUB_PORT")
     sub_public_url: str = Field(default="", alias="SUB_PUBLIC_URL")
+    # مسیر گواهی TLS داخل کانتینر؛ اگر تنظیم شود سرور اشتراک HTTPS می‌شود
+    sub_tls_cert: str = Field(default="", alias="SUB_TLS_CERT")
+    sub_tls_key: str = Field(default="", alias="SUB_TLS_KEY")
 
     timezone: str = Field(default="Asia/Tehran", alias="TIMEZONE")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")

@@ -231,6 +231,14 @@ class XuiClient:
                 return item
         raise VpnError(f"client {email} not found in inbound {inbound.get('id')}")
 
+    async def build_client_link(
+        self, inbound_id: int, client_uuid: str, email: str
+    ) -> str:
+        """لینک را از روی کلاینت موجود پنل بازسازی می‌کند (بدون ساخت مجدد)."""
+        inbound = await self.get_inbound(inbound_id)
+        client = await self._find_client(inbound, client_uuid, email)
+        return self._build_link(inbound, client, email)
+
     async def extend_client(
         self,
         inbound_id: int,

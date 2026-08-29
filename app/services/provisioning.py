@@ -220,6 +220,40 @@ async def delete_service(session: AsyncSession, service: Service) -> None:
     await session.commit()
 
 
+async def regenerate_links(session: AsyncSession) -> int:
+    """لینک همه کلاینت‌ها را بر اساس host فعلی (دامنه) بازسازی می‌کند."""
+    provider = get_provider()
+    clients = list(
+        (
+            await session.execute(
+                select(ServiceClient).order_by(ServiceClient.id)
+            )
+        ).scalars().all()
+    )
+    changed = 0
+    primary_by_service: dict[int, str] = {}
+    for c in clients:
+        try:
+            link = await provider.build_client_link(
+                c.inbound_id, c.client_uuid, c.email
+            )
+        except VpnError:
+            continue
+        if link and link != c.config_link:
+            c.config_link = link
+            changed += 1
+        primary_by_service.setdefault(c.service_id, c.config_link)
+
+    # لینک اصلی هر سرویس را هم به‌روزرسانی کن
+    for service_id, link in primary_by_service.items():
+        svc = await session.get(Service, service_id)
+        if svc is not None and link:
+            svc.config_link = link
+
+    await session.commit()
+    return changed
+
+
 async def sync_service(
     session: AsyncSession, service: Service, usage_map: dict | None = None
 ) -> Service:

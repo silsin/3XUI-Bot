@@ -29,6 +29,7 @@ def home() -> InlineKeyboardMarkup:
     b.button(text="👥 کاربران", callback_data=AdminCB(action="users"))
     b.button(text="📊 آمار", callback_data=AdminCB(action="stats"))
     b.button(text="📣 پیام همگانی", callback_data=AdminCB(action="broadcast"))
+    b.button(text="🔗 بازتولید لینک‌ها", callback_data=AdminCB(action="regen"))
     b.button(text="🔌 تست اتصال پنل", callback_data=AdminCB(action="ping"))
     b.adjust(2)
     return b.as_markup()

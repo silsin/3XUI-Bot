@@ -667,6 +667,24 @@ async def stats(call: CallbackQuery, session: AsyncSession) -> None:
 # ---------- تست اتصال پنل ----------
 
 
+@router.callback_query(kb.AdminCB.filter(F.action == "regen"))
+async def regen_links(call: CallbackQuery, session: AsyncSession) -> None:
+    from app.services import provisioning
+
+    await call.answer("در حال بازتولید...")
+    try:
+        n = await provisioning.regenerate_links(session)
+        await call.message.edit_text(
+            f"🔗 لینک‌ها بازتولید شد. تعداد به‌روزرسانی: {fa_digits(n)}\n"
+            "(بر اساس host/دامنه فعلی)",
+            reply_markup=kb.back_home(),
+        )
+    except Exception as exc:  # noqa: BLE001
+        await call.message.edit_text(
+            f"🔴 خطا در بازتولید:\n<code>{exc}</code>", reply_markup=kb.back_home()
+        )
+
+
 @router.callback_query(kb.AdminCB.filter(F.action == "ping"))
 async def ping_panel(call: CallbackQuery) -> None:
     await call.answer("در حال بررسی...")

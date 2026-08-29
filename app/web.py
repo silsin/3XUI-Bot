@@ -51,10 +51,13 @@ def make_web_app() -> web.Application:
     return app
 
 
-async def start_web(host: str, port: int) -> web.AppRunner:
+async def start_web(host: str, port: int, ssl_context=None) -> web.AppRunner:
     runner = web.AppRunner(make_web_app())
     await runner.setup()
-    site = web.TCPSite(runner, host, port)
+    site = web.TCPSite(runner, host, port, ssl_context=ssl_context)
     await site.start()
-    logger.info("subscription server listening on %s:%s", host, port)
+    logger.info(
+        "subscription server listening on %s:%s (%s)",
+        host, port, "https" if ssl_context else "http",
+    )
     return runner

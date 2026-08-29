@@ -61,10 +61,23 @@ async def main() -> None:
 
     web_runner = None
     if settings.sub_public_url:
+        import os
+
         from app.web import start_web
 
+        ssl_ctx = None
+        cert, key = settings.sub_tls_cert, settings.sub_tls_key
+        if cert and key and os.path.exists(cert) and os.path.exists(key):
+            import ssl
+
+            ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            ssl_ctx.load_cert_chain(certfile=cert, keyfile=key)
+            logger.info("subscription server TLS enabled")
+        elif cert or key:
+            logger.warning("TLS cert/key configured but not found; serving HTTP")
+
         # پورت داخلی ثابت است؛ نگاشت پورت میزبان در docker-compose انجام می‌شود
-        web_runner = await start_web("0.0.0.0", 8080)
+        web_runner = await start_web("0.0.0.0", 8080, ssl_ctx)
 
     try:
         # اولین تماس با تلگرام؛ اعتبار توکن اینجا مشخص می‌شود

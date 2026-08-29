@@ -4,17 +4,21 @@ services:
     image: alovpn-bot
     container_name: alovpn-bot
     restart: unless-stopped
+    # اجرا با root تا گواهی TLS متعلق به root قابل خواندن باشد
+    user: "0:0"
     env_file:
       - .env
     environment:
       # منطقه زمانی کانتینر (برای زمان‌بند و لاگ‌ها)
       TZ: ${TIMEZONE:-Asia/Tehran}
     ports:
-      # سرور اشتراک داخلی ربات
-      - "${SUB_PORT:-8080}:8080"
+      # سرور اشتراک داخلی ربات (HTTPS)
+      - "${SUB_PORT:-8443}:8080"
     volumes:
-      # ولوم نام‌دار: مستقل از یوزر هاست، توسط appuser قابل نوشتن است
+      # ولوم نام‌دار برای دیتابیس
       - bot_data:/app/data
+      # گواهی‌های TLS (فقط-خواندنی)
+      - /root/cert:/certs:ro
 
 volumes:
   bot_data:
