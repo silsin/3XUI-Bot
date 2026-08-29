@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import Service, ServiceStatus, User
+from app.db.models import Service, ServiceClient, ServiceStatus, User
 from app.keyboards import inline
 from app.services import provisioning
 from app.texts import BTN_MY_SERVICES, MSG_NO_SERVICES
@@ -83,11 +83,9 @@ def _detail_text(service: Service) -> str:
     clients = sorted(service.clients, key=lambda c: c.id)
     if clients:
         lines.append(
-            "\n🔐 <b>کانفیگ‌ها</b> — اگر یکی وصل نشد، دیگری را امتحان کنید:"
+            "\n🔐 برای دریافت هر کانفیگ روی دکمه‌ی آن بزنید. "
+            "اگر یکی وصل نشد، دیگری را امتحان کنید."
         )
-        for c in clients:
-            label = c.label or (c.protocol or "config").upper()
-            lines.append(f"\n▫️ <b>{label}</b>\n<code>{c.config_link}</code>")
     elif service.config_link:
         lines.append(f"\n🔐 کانفیگ:\n<code>{service.config_link}</code>")
     return "\n".join(lines)
@@ -161,6 +159,44 @@ async def view_service(
         )
     except Exception:  # noqa: BLE001 — پیام تغییری نکرده
         pass
+
+
+@router.callback_query(inline.ServiceCB.filter(F.action == "cfg"))
+async def send_single_config(
+    call: CallbackQuery,
+    callback_data: inline.ServiceCB,
+    session: AsyncSession,
+    user: User,
+) -> None:
+    client = await session.get(ServiceClient, callback_data.client_id)
+    if client is None:
+        await call.answer("کانفیگ یافت نشد.", show_alert=True)
+        return
+    service = await session.get(Service, client.service_id)
+    if service is None or service.user_id != user.id:
+        await call.answer("کانفیگ یافت نشد.", show_alert=True)
+        return
+
+    label = client.label or (client.protocol or "config").upper()
+    link = client.config_link
+    markup = None
+    # دکمه کپی بومی فقط اگر در محدودیت ۲۵۶ کاراکتری تلگرام جا شود (vless/trojan)
+    if link and len(link) <= 256:
+        from aiogram.types import CopyTextButton, InlineKeyboardButton, InlineKeyboardMarkup
+
+        markup = InlineKeyboardMarkup(
+            inline_keyboard=[[
+                InlineKeyboardButton(
+                    text="📋 کپی کانفیگ", copy_text=CopyTextButton(text=link)
+                )
+            ]]
+        )
+    await call.answer()
+    await call.message.answer(
+        f"🔐 <b>{label}</b>\n<code>{link}</code>",
+        reply_markup=markup,
+        disable_web_page_preview=True,
+    )
 
 
 @router.callback_query(inline.ServiceCB.filter(F.action == "refresh"))

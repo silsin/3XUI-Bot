@@ -30,8 +30,9 @@ class BuyCB(CallbackData, prefix="buy"):
 
 
 class ServiceCB(CallbackData, prefix="srv"):
-    action: str  # view | refresh | list | renew
+    action: str  # view | refresh | list | renew | cfg
     service_id: int = 0
+    client_id: int = 0  # برای action=cfg
 
 
 class ReceiptCB(CallbackData, prefix="rcp"):
@@ -156,6 +157,23 @@ def services_kb(services: list[Service]) -> InlineKeyboardMarkup:
 
 def service_detail_kb(service: Service) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
+
+    # یک دکمه برای هر کانفیگ (پروتکل)
+    clients = sorted(getattr(service, "clients", []), key=lambda c: c.id)
+    cfg_rows: list[int] = []
+    if clients:
+        for c in clients:
+            label = c.label or (c.protocol or "config").upper()
+            builder.button(
+                text=f"📥 {label}",
+                callback_data=ServiceCB(
+                    action="cfg", service_id=service.id, client_id=c.id
+                ),
+            )
+        # دو ستونه
+        full = len(clients) // 2
+        cfg_rows = [2] * full + ([1] if len(clients) % 2 else [])
+
     builder.button(
         text="🔄 به‌روزرسانی مصرف",
         callback_data=ServiceCB(action="refresh", service_id=service.id),
@@ -167,7 +185,7 @@ def service_detail_kb(service: Service) -> InlineKeyboardMarkup:
     builder.button(
         text=BTN_BACK, callback_data=ServiceCB(action="list", service_id=0)
     )
-    builder.adjust(1)
+    builder.adjust(*cfg_rows, 1, 1, 1)
     return builder.as_markup()
 
 
