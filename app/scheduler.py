@@ -20,8 +20,10 @@ REMIND_WITHIN_DAYS = 3
 
 
 async def sync_and_remind(bot: Bot) -> None:
-    """مصرف سرویس‌های فعال را به‌روز و درباره انقضای نزدیک هشدار می‌دهد."""
+    """مصرف را جمع می‌زند، سهمیه/انقضا را اعمال و درباره انقضای نزدیک هشدار می‌دهد."""
     sessionmaker = get_sessionmaker()
+    from app.services.vpn import get_provider
+
     async with sessionmaker() as session:
         services = list(
             (
@@ -30,15 +32,24 @@ async def sync_and_remind(bot: Bot) -> None:
                 )
             ).scalars().all()
         )
+        if not services:
+            return
+
+        # یک بار همه مصرف‌ها را می‌گیریم و بین سرویس‌ها به اشتراک می‌گذاریم
+        try:
+            usage_map = await get_provider().get_all_usage()
+        except Exception:  # noqa: BLE001
+            logger.exception("bulk usage fetch failed")
+            usage_map = {}
 
         for service in services:
             try:
-                service = await provisioning.sync_usage(session, service)
+                service = await provisioning.sync_service(session, service, usage_map)
             except Exception:  # noqa: BLE001
                 logger.exception("sync failed for service %s", service.id)
                 continue
 
-            if service.expires_at is None:
+            if service.expires_at is None or service.status != ServiceStatus.ACTIVE:
                 continue
             remaining = days_left(service.expires_at)
             if 0 < remaining <= REMIND_WITHIN_DAYS and not service.expiry_notified:
@@ -60,10 +71,11 @@ def setup_scheduler(bot: Bot, timezone_name: str) -> AsyncIOScheduler:
     scheduler.add_job(
         sync_and_remind,
         trigger="interval",
-        hours=6,
+        minutes=10,
         args=(bot,),
-        next_run_time=datetime.now(timezone.utc) + timedelta(minutes=2),
+        next_run_time=datetime.now(timezone.utc) + timedelta(minutes=1),
         id="sync_and_remind",
         max_instances=1,
+        coalesce=True,
     )
     return scheduler

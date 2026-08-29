@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
@@ -66,14 +67,20 @@ async def cmd_start(
     markup = reply.main_menu(is_admin=is_admin)
 
     if image:
-        # کپشن تلگرام حداکثر ۱۰۲۴ کاراکتر است
-        if len(text) <= 1024:
-            await message.answer_photo(image, caption=text, reply_markup=markup)
-        else:
-            await message.answer_photo(image)
-            await message.answer(text, reply_markup=markup)
-    else:
-        await message.answer(text, reply_markup=markup)
+        try:
+            # کپشن تلگرام حداکثر ۱۰۲۴ کاراکتر است
+            if len(text) <= 1024:
+                await message.answer_photo(image, caption=text, reply_markup=markup)
+            else:
+                await message.answer_photo(image)
+                await message.answer(text, reply_markup=markup)
+            return
+        except TelegramBadRequest:
+            # file_id مختص هر ربات است؛ اگر توکن ربات عوض شده باشد نامعتبر می‌شود
+            logger.warning("welcome image file_id invalid, clearing it")
+            await cfg.set_value(session, S_WELCOME_IMAGE, "")
+
+    await message.answer(text, reply_markup=markup)
 
 
 @router.message(Command("cancel"))

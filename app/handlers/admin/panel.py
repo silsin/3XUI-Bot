@@ -34,6 +34,7 @@ from app.texts import (
     S_CONFIG_CAPTION,
     S_GUIDE_TEXT,
     S_INVITE_TEXT,
+    S_MULTI_INBOUNDS,
     S_POINTS_PER_DAY,
     S_POINTS_TEXT,
     S_REDEEM_INBOUND,
@@ -166,6 +167,22 @@ async def show_points(call: CallbackQuery, session: AsyncSession) -> None:
         f"هر {fa_digits(per_day)} امتیاز = ۱ روز اشتراک"
     )
     await call.message.edit_text(text, reply_markup=kb.edit_list(POINTS_FIELDS))
+    await call.answer()
+
+
+@router.callback_query(kb.AdminCB.filter(F.action == "multi"))
+async def show_multi(call: CallbackQuery, session: AsyncSession) -> None:
+    current = await cfg.get(session, S_MULTI_INBOUNDS)
+    text = (
+        "🧩 <b>اینباندهای کانفیگ (چند پروتکل)</b>\n\n"
+        f"فعلی: <code>{current or '—'}</code>\n\n"
+        "شماره inboundهای پنل را با کاما وارد کنید (مثلاً <code>4,6,7</code>).\n"
+        "برای هر خرید/تست، روی <b>همه‌ی</b> این inboundها یک کانفیگ ساخته می‌شود "
+        "که همگی به یک کاربر تعلق دارند و سهمیه‌شان مشترک است."
+    )
+    await call.message.edit_text(
+        text, reply_markup=kb.edit_list([(S_MULTI_INBOUNDS, "✏️ ویرایش لیست inbound")])
+    )
     await call.answer()
 
 

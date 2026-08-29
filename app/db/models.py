@@ -173,12 +173,41 @@ class Service(Base):
         Enum(ServiceStatus), default=ServiceStatus.ACTIVE, index=True
     )
 
-    # آخرین مصرف خوانده‌شده از پنل (بایت)
+    # آخرین مصرف خوانده‌شده از پنل (بایت) — مجموع همه کلاینت‌ها
     used_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
     expiry_notified: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     user: Mapped[User] = relationship(back_populates="services")
+    clients: Mapped[list["ServiceClient"]] = relationship(
+        back_populates="service", cascade="all, delete-orphan"
+    )
+
+
+class ServiceClient(Base):
+    """یک کانفیگ پروتکل مشخص متعلق به یک سرویس (روی یک inbound).
+
+    چند کلاینت زیر یک سرویس، همگی متعلق به یک کاربر با سهمیه و انقضای مشترک
+    هستند؛ سهمیه به‌صورت جمع مصرف همه‌ی آن‌ها در سطح ربات کنترل می‌شود.
+    """
+
+    __tablename__ = "service_clients"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    service_id: Mapped[int] = mapped_column(
+        ForeignKey("services.id", ondelete="CASCADE"), index=True
+    )
+    inbound_id: Mapped[int] = mapped_column(Integer)
+    protocol: Mapped[str] = mapped_column(String(32), default="")
+    label: Mapped[str] = mapped_column(String(64), default="")
+    client_uuid: Mapped[str] = mapped_column(String(64), index=True)
+    email: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    config_link: Mapped[str] = mapped_column(Text, default="")
+    used_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    service: Mapped[Service] = relationship(back_populates="clients")
 
 
 class PointsEntry(Base):

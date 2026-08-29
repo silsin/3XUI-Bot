@@ -25,6 +25,7 @@ def home() -> InlineKeyboardMarkup:
     b.button(text="⏱ مدت‌ها و پکیج‌ها", callback_data=AdminCB(action="durations"))
     b.button(text="🎁 تنظیمات تست رایگان", callback_data=AdminCB(action="trial"))
     b.button(text="🏅 تنظیمات امتیاز", callback_data=AdminCB(action="points"))
+    b.button(text="🧩 اینباندهای کانفیگ", callback_data=AdminCB(action="multi"))
     b.button(text="👥 کاربران", callback_data=AdminCB(action="users"))
     b.button(text="📊 آمار", callback_data=AdminCB(action="stats"))
     b.button(text="📣 پیام همگانی", callback_data=AdminCB(action="broadcast"))

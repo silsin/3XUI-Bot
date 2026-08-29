@@ -155,12 +155,13 @@ class XuiClient:
         traffic_mb: int,
         device_limit: int = 0,
         telegram_id: int | None = None,
+        sub_id: str | None = None,
     ) -> ProvisionResult:
         inbound = await self.get_inbound(inbound_id)
         protocol = (inbound.get("protocol") or "vless").lower()
 
         client_uuid = str(uuid_lib.uuid4())
-        sub_id = secrets.token_hex(8)
+        sub_id = sub_id or secrets.token_hex(8)
         expiry_ms = int((time.time() + days * 86400) * 1000) if days > 0 else 0
 
         client: dict[str, Any] = {
@@ -204,6 +205,7 @@ class XuiClient:
             inbound_id=inbound_id,
             config_link=link,
             sub_link=sub_link,
+            protocol=protocol,
         )
 
     def _build_link(self, inbound: dict, client: dict, remark: str) -> str:
@@ -317,3 +319,26 @@ class XuiClient:
             found=True,
             extra=obj if isinstance(obj, dict) else {},
         )
+
+    async def get_all_usage(self) -> dict[str, UsageInfo]:
+        """نگاشت email → مصرف برای همه کلاینت‌ها با یک بار فراخوانی پنل."""
+        result: dict[str, UsageInfo] = {}
+        try:
+            inbounds = await self.list_inbounds()
+        except VpnError:
+            return result
+        for inbound in inbounds:
+            for stat in inbound.get("clientStats") or []:
+                email = stat.get("email")
+                if not email:
+                    continue
+                result[email] = UsageInfo(
+                    up=int(stat.get("up") or 0),
+                    down=int(stat.get("down") or 0),
+                    total=int(stat.get("total") or 0),
+                    expiry_ms=int(stat.get("expiryTime") or 0),
+                    enable=bool(stat.get("enable", True)),
+                    found=True,
+                    extra=stat,
+                )
+        return result

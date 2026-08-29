@@ -6,6 +6,7 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.db.models import Service, ServiceStatus, User
 from app.keyboards import inline
@@ -55,6 +56,16 @@ async def _user_services(session: AsyncSession, user_id: int) -> list[Service]:
     )
 
 
+async def _get_service(session: AsyncSession, service_id: int) -> Service | None:
+    return (
+        await session.execute(
+            select(Service)
+            .where(Service.id == service_id)
+            .options(selectinload(Service.clients))
+        )
+    ).scalar_one_or_none()
+
+
 def _detail_text(service: Service) -> str:
     total = service.traffic_mb * (1024 ** 2)
     lines = [
@@ -68,7 +79,17 @@ def _detail_text(service: Service) -> str:
     ]
     if service.sub_link:
         lines.append(f"\n🔗 لینک اشتراک:\n<code>{service.sub_link}</code>")
-    lines.append(f"\n🔐 کانفیگ:\n<code>{service.config_link}</code>")
+
+    clients = sorted(service.clients, key=lambda c: c.id)
+    if clients:
+        lines.append(
+            "\n🔐 <b>کانفیگ‌ها</b> — اگر یکی وصل نشد، دیگری را امتحان کنید:"
+        )
+        for c in clients:
+            label = c.label or (c.protocol or "config").upper()
+            lines.append(f"\n▫️ <b>{label}</b>\n<code>{c.config_link}</code>")
+    elif service.config_link:
+        lines.append(f"\n🔐 کانفیگ:\n<code>{service.config_link}</code>")
     return "\n".join(lines)
 
 
@@ -129,12 +150,17 @@ async def view_service(
     if service is None or service.user_id != user.id:
         await call.answer("سرویس یافت نشد.", show_alert=True)
         return
-    await call.message.edit_text(
-        _detail_text(service),
-        reply_markup=inline.service_detail_kb(service),
-        disable_web_page_preview=True,
-    )
+    # اعمال سهمیه/انقضا در لحظه مشاهده
+    service = await provisioning.sync_service(session, service)
     await call.answer()
+    try:
+        await call.message.edit_text(
+            _detail_text(service),
+            reply_markup=inline.service_detail_kb(service),
+            disable_web_page_preview=True,
+        )
+    except Exception:  # noqa: BLE001 — پیام تغییری نکرده
+        pass
 
 
 @router.callback_query(inline.ServiceCB.filter(F.action == "refresh"))
@@ -149,7 +175,7 @@ async def refresh_service(
         await call.answer("سرویس یافت نشد.", show_alert=True)
         return
     await call.answer("در حال به‌روزرسانی...")
-    service = await provisioning.sync_usage(session, service)
+    service = await provisioning.sync_service(session, service)
     try:
         await call.message.edit_text(
             _detail_text(service),

@@ -18,6 +18,7 @@ class ProvisionResult:
     inbound_id: int
     config_link: str
     sub_link: str = ""
+    protocol: str = ""
 
 
 @dataclass(slots=True)
@@ -48,6 +49,7 @@ class VpnProvider(Protocol):
         traffic_mb: int,
         device_limit: int = 0,
         telegram_id: int | None = None,
+        sub_id: str | None = None,
     ) -> ProvisionResult: ...
 
     async def extend_client(
@@ -61,6 +63,8 @@ class VpnProvider(Protocol):
     ) -> None: ...
 
     async def get_usage(self, email: str) -> UsageInfo: ...
+
+    async def get_all_usage(self) -> dict[str, UsageInfo]: ...
 
     async def delete_client(self, inbound_id: int, client_uuid: str) -> None: ...
 

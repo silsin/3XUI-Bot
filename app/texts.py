@@ -38,6 +38,8 @@ S_POINTS_PER_DAY = "points_per_day"
 S_REDEEM_INBOUND = "redeem_inbound_id"
 S_REDEEM_MIN_DAYS = "redeem_min_days"
 S_CONFIG_CAPTION = "config_caption"
+# فهرست inboundهای چند-پروتکل (با کاما). خالی = استفاده از inbound پکیج/تنظیمات
+S_MULTI_INBOUNDS = "multi_inbounds"
 
 DEFAULT_SETTINGS: dict[str, str] = {
     S_WELCOME_TEXT: (
@@ -102,6 +104,7 @@ DEFAULT_SETTINGS: dict[str, str] = {
     S_POINTS_PER_DAY: "10",
     S_REDEEM_INBOUND: "4",
     S_REDEEM_MIN_DAYS: "1",
+    S_MULTI_INBOUNDS: "4",
     S_CONFIG_CAPTION: (
         "✅ <b>سرویس شما آماده است</b>\n\n"
         "{title}\n"
