@@ -195,26 +195,10 @@ async def send_single_config(
     if not link:
         await call.answer("کانفیگ خالی است.", show_alert=True)
         return
-    markup = None
-    # دکمه کپی بومی فقط اگر در محدودیت ۲۵۶ کاراکتری تلگرام جا شود (vless/trojan)
-    if len(link) <= 256:
-        from aiogram.types import CopyTextButton, InlineKeyboardButton, InlineKeyboardMarkup
-
-        markup = InlineKeyboardMarkup(
-            inline_keyboard=[[
-                InlineKeyboardButton(
-                    text="📋 کپی کانفیگ", copy_text=CopyTextButton(text=link)
-                )
-            ]]
-        )
     await call.answer()
-    # عکس QR + متن قابل کپی
-    qr = BufferedInputFile(make_qr_png(link), filename=f"{label}.png")
-    await call.message.answer_photo(
-        qr,
-        caption=f"🔐 <b>{label}</b>\n<code>{link}</code>",
-        reply_markup=markup,
-    )
+    from app.handlers.delivery import send_config_message
+
+    await send_config_message(call.bot, call.message.chat.id, label, link)
 
 
 @router.callback_query(inline.ServiceCB.filter(F.action == "sub"))
@@ -238,10 +222,10 @@ async def send_sub_link(
         qr,
         caption=(
             "🔗 <b>لینک اشتراک (همه پروتکل‌ها)</b>\n"
-            "این لینک را در نرم‌افزار به‌عنوان Subscription اضافه کنید:\n"
-            f"<code>{sub}</code>"
+            "QR را اسکن کنید یا لینک زیر را به‌عنوان Subscription اضافه کنید 👇"
         ),
     )
+    await call.message.answer(f"<code>{sub}</code>", disable_web_page_preview=True)
 
 
 @router.callback_query(inline.ServiceCB.filter(F.action == "refresh"))
