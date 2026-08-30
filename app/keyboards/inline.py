@@ -103,6 +103,7 @@ def checkout_kb(
             package_id=package_id,
             service_id=service_id,
         ),
+        style="success",
     )
     builder.button(
         text=BTN_BACK,
@@ -125,19 +126,31 @@ def payment_kb(
     copy_row = 0
     if card_digits:
         builder.button(
-            text="کپی شماره کارت", copy_text=CopyTextButton(text=card_digits)
+            text="کپی شماره کارت",
+            copy_text=CopyTextButton(text=card_digits),
+            style="primary",
         )
         copy_row += 1
     if amount:
         builder.button(
-            text=toman_short(amount), copy_text=CopyTextButton(text=str(int(amount)))
+            text=toman_short(amount),
+            copy_text=CopyTextButton(text=str(int(amount))),
+            style="primary",
         )
         copy_row += 1
     if copy_row:
         rows.append(copy_row)
 
-    builder.button(text=BTN_SEND_RECEIPT, callback_data=f"receipt:start:{order_id}")
-    builder.button(text=BTN_CANCEL, callback_data=f"receipt:cancel:{order_id}")
+    builder.button(
+        text=BTN_SEND_RECEIPT,
+        callback_data=f"receipt:start:{order_id}",
+        style="success",
+    )
+    builder.button(
+        text=BTN_CANCEL,
+        callback_data=f"receipt:cancel:{order_id}",
+        style="danger",
+    )
     rows += [1, 1]
     builder.adjust(*rows)
     return builder.as_markup()
@@ -202,10 +215,14 @@ def service_detail_kb(service: Service) -> InlineKeyboardMarkup:
 def receipt_review_kb(order_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(
-        text=BTN_APPROVE, callback_data=ReceiptCB(action="approve", order_id=order_id)
+        text=BTN_APPROVE,
+        callback_data=ReceiptCB(action="approve", order_id=order_id),
+        style="success",
     )
     builder.button(
-        text=BTN_REJECT, callback_data=ReceiptCB(action="reject", order_id=order_id)
+        text=BTN_REJECT,
+        callback_data=ReceiptCB(action="reject", order_id=order_id),
+        style="danger",
     )
     builder.adjust(2)
     return builder.as_markup()
