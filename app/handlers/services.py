@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.config import get_settings
 from app.db.models import Service, ServiceClient, ServiceStatus, User
 from app.keyboards import inline
+from app.services import activity_service as activity
 from app.services import provisioning
 from app.texts import BTN_MY_SERVICES, MSG_NO_SERVICES
 from app.utils.formatting import (
@@ -129,6 +130,8 @@ async def my_services(message: Message, session: AsyncSession, user: User) -> No
         header += f" | منقضی: {fa_digits(expired)} (از «♻️ تمدید سرویس» تمدید کنید)"
     header += "\n\nبرای مشاهده جزئیات هر سرویس روی آن بزنید:"
     await message.answer(header, reply_markup=inline.services_kb(active))
+    # لاگ فعالیت
+    await activity.log_activity(session, user.id, activity.Actions.VIEW_SERVICES)
 
 
 @router.callback_query(inline.ServiceCB.filter(F.action == "list"))
@@ -172,6 +175,11 @@ async def view_service(
         )
     except Exception:  # noqa: BLE001 — پیام تغییری نکرده
         pass
+    # لاگ فعالیت
+    await activity.log_activity(
+        session, user.id, activity.Actions.VIEW_CONFIG,
+        {"service_id": service.id, "title": service.title}
+    )
 
 
 @router.callback_query(inline.ServiceCB.filter(F.action == "cfg"))
@@ -199,6 +207,11 @@ async def send_single_config(
     from app.handlers.delivery import send_config_message
 
     await send_config_message(call.bot, call.message.chat.id, label, link)
+    # لاگ فعالیت
+    await activity.log_activity(
+        session, user.id, activity.Actions.COPY_LINK,
+        {"service_id": service.id, "protocol": client.protocol, "label": label}
+    )
 
 
 @router.callback_query(inline.ServiceCB.filter(F.action == "sub"))

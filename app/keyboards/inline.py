@@ -55,12 +55,14 @@ def durations_kb(
             callback_data=BuyCB(
                 action="packages", duration_id=item.id, service_id=service_id
             ),
+            style="primary",
         )
     builder.adjust(2)
     builder.row(
         InlineKeyboardButton(
             text=BTN_CANCEL,
             callback_data=BuyCB(action="cancel", service_id=service_id).pack(),
+            style="danger",
         )
     )
     return builder.as_markup()
@@ -80,12 +82,14 @@ def packages_kb(
                 package_id=item.id,
                 service_id=service_id,
             ),
+            style="success",
         )
     builder.adjust(1)
     builder.row(
         InlineKeyboardButton(
             text=BTN_BACK,
             callback_data=BuyCB(action="durations", service_id=service_id).pack(),
+            style="primary",
         )
     )
     return builder.as_markup()
@@ -110,6 +114,7 @@ def checkout_kb(
         callback_data=BuyCB(
             action="packages", duration_id=duration_id, service_id=service_id
         ),
+        style="primary",
     )
     builder.adjust(1)
     return builder.as_markup()
@@ -163,6 +168,7 @@ def services_kb(services: list[Service]) -> InlineKeyboardMarkup:
         builder.button(
             text=f"{mark} {item.title} ({days_left_text(item.expires_at)})",
             callback_data=ServiceCB(action="view", service_id=item.id),
+            style="primary",
         )
     builder.adjust(1)
     return builder.as_markup()
@@ -182,6 +188,7 @@ def service_detail_kb(service: Service) -> InlineKeyboardMarkup:
                 callback_data=ServiceCB(
                     action="cfg", service_id=service.id, client_id=c.id
                 ),
+                style="primary",
             )
         # دو ستونه
         full = len(clients) // 2
@@ -194,19 +201,23 @@ def service_detail_kb(service: Service) -> InlineKeyboardMarkup:
         builder.button(
             text="🔗 لینک اشتراک + QR",
             callback_data=ServiceCB(action="sub", service_id=service.id),
+            style="primary",
         )
         extra_rows.append(1)
 
     builder.button(
         text="🔄 به‌روزرسانی مصرف",
         callback_data=ServiceCB(action="refresh", service_id=service.id),
+        style="primary",
     )
     builder.button(
         text="♻️ تمدید این سرویس",
         callback_data=BuyCB(action="durations", service_id=service.id),
+        style="success",
     )
     builder.button(
-        text=BTN_BACK, callback_data=ServiceCB(action="list", service_id=0)
+        text=BTN_BACK, callback_data=ServiceCB(action="list", service_id=0),
+        style="primary",
     )
     builder.adjust(*cfg_rows, *extra_rows, 1, 1, 1)
     return builder.as_markup()
@@ -234,6 +245,7 @@ def points_kb(available_days: int) -> InlineKeyboardMarkup:
         builder.button(
             text=f"🎁 دریافت {fa_digits(available_days)} روز اشتراک هدیه",
             callback_data=PointsCB(action="redeem", days=available_days),
+            style="success",
         )
     builder.adjust(1)
     return builder.as_markup()
@@ -246,6 +258,7 @@ def invite_kb(link: str, share_text: str) -> InlineKeyboardMarkup:
     builder.button(
         text="📤 ارسال به دوستان",
         url=f"https://t.me/share/url?url={quote(link)}&text={quote(share_text)}",
+        style="primary",
     )
     return builder.as_markup()
 

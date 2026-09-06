@@ -22,6 +22,7 @@ from app.db.models import (
 )
 from app.keyboards import inline
 from app.keyboards import reply
+from app.services import activity_service as activity
 from app.services import settings_service as cfg
 from app.states import BuyFlow
 from app.texts import (
@@ -86,6 +87,8 @@ async def start_buy(message: Message, session: AsyncSession, state: FSMContext) 
     await message.answer(
         MSG_CHOOSE_DURATION, reply_markup=inline.durations_kb(durations)
     )
+    # لاگ فعالیت
+    await activity.log_activity(session, message.from_user.id, activity.Actions.VIEW_PLANS)
 
 
 @router.message(F.text == BTN_RENEW)
@@ -106,6 +109,8 @@ async def start_renew(message: Message, session: AsyncSession, user: User) -> No
         "کدام سرویس را می‌خواهید تمدید کنید؟",
         reply_markup=inline.services_kb(services),
     )
+    # لاگ فعالیت
+    await activity.log_activity(session, user.id, activity.Actions.INITIATE_BUY, {"type": "renew"})
 
 
 # ---------- ناوبری اینلاین ----------
@@ -125,6 +130,8 @@ async def show_durations(
         reply_markup=inline.durations_kb(durations, callback_data.service_id),
     )
     await call.answer()
+    # لاگ فعالیت
+    await activity.log_activity(session, call.from_user.id, activity.Actions.VIEW_DURATIONS)
 
 
 @router.callback_query(inline.BuyCB.filter(F.action == "packages"))
@@ -143,6 +150,11 @@ async def show_packages(
         ),
     )
     await call.answer()
+    # لاگ فعالیت
+    await activity.log_activity(
+        session, call.from_user.id, activity.Actions.VIEW_PACKAGES,
+        {"duration_id": callback_data.duration_id, "duration_title": duration.title}
+    )
 
 
 @router.callback_query(inline.BuyCB.filter(F.action == "checkout"))

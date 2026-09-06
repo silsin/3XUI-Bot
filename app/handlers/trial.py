@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import User
 from app.handlers.delivery import send_config
+from app.services import activity_service as activity
 from app.services import provisioning
 from app.services import settings_service as cfg
 from app.services.vpn import VpnError
@@ -44,3 +45,5 @@ async def free_trial(message: Message, session: AsyncSession, user: User) -> Non
 
     await wait.delete()
     await send_config(message.bot, message.chat.id, service, session)
+    # لاگ فعالیت
+    await activity.log_activity(session, user.id, activity.Actions.TRIAL)

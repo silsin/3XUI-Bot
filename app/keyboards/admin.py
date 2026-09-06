@@ -28,6 +28,7 @@ def home() -> InlineKeyboardMarkup:
     b.button(text="🧩 اینباندهای کانفیگ", callback_data=AdminCB(action="multi"))
     b.button(text="👥 کاربران", callback_data=AdminCB(action="users"))
     b.button(text="📊 آمار", callback_data=AdminCB(action="stats"))
+    b.button(text="📈 گزارش فعالیت کاربران", callback_data=AdminCB(action="activity"))
     b.button(text="📣 پیام همگانی", callback_data=AdminCB(action="broadcast"))
     b.button(text="🔗 بازتولید لینک‌ها", callback_data=AdminCB(action="regen"))
     b.button(text="🔌 تست اتصال پنل", callback_data=AdminCB(action="ping"))
@@ -159,4 +160,23 @@ def user_actions(user_id: int, is_blocked: bool) -> InlineKeyboardMarkup:
         b.button(text="⛔️ مسدودسازی", callback_data=AdminCB(action="user_block", arg=user_id))
     b.adjust(1)
     b.row(_back("users"))
+    return b.as_markup()
+
+def activity_home_kb() -> InlineKeyboardMarkup:
+    """صفحه اصلی گزارش فعالیت."""
+    b = InlineKeyboardBuilder()
+    b.button(text="📋 آخرین فعالیت‌ها", callback_data=AdminCB(action="activity_recent"))
+    b.button(text="🔍 جستجوی کاربر", callback_data=AdminCB(action="activity_search"))
+    b.adjust(1)
+    b.row(_back("home"))
+    return b.as_markup()
+    b.adjust(1)
+    b.row(_back("home"))
+    return b.as_markup()
+
+
+def back_activity() -> InlineKeyboardMarkup:
+    """دکمه بازگشت به صفحه فعالیت."""
+    b = InlineKeyboardBuilder()
+    b.row(InlineKeyboardButton(text=BTN_BACK, callback_data=AdminCB(action="activity").pack()))
     return b.as_markup()

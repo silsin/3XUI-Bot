@@ -17,3 +17,7 @@ class AdminFlow(StatesGroup):
     broadcast = State()
     user_lookup = State()
     gift_days = State()
+
+
+class ActivitySearch(StatesGroup):
+    waiting_user_id = State()

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import User
 from app.keyboards import reply
+from app.services import activity_service as activity
 from app.services import settings_service as cfg
 from app.utils.formatting import render
 from app.texts import (
@@ -81,6 +82,8 @@ async def cmd_start(
             await cfg.set_value(session, S_WELCOME_IMAGE, "")
 
     await message.answer(text, reply_markup=markup)
+    # لاگ فعالیت
+    await activity.log_activity(session, user.id, activity.Actions.START)
 
 
 @router.message(Command("cancel"))
@@ -90,8 +93,10 @@ async def cmd_cancel(message: Message, state: FSMContext, is_admin: bool) -> Non
 
 
 @router.message(Command("menu"))
-async def cmd_menu(message: Message, is_admin: bool) -> None:
+async def cmd_menu(message: Message, is_admin: bool, session: AsyncSession) -> None:
     await message.answer("منوی اصلی 👇", reply_markup=reply.main_menu(is_admin))
+    # لاگ فعالیت
+    await activity.log_activity(session, message.from_user.id, activity.Actions.MENU)
 
 
 @fallback_router.message(F.text)

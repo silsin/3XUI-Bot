@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Service, ServiceStatus, User
 from app.handlers.delivery import send_config
 from app.keyboards import inline
+from app.services import activity_service as activity
 from app.services import points_service as pts
 from app.services import provisioning
 from app.services import settings_service as cfg
@@ -41,6 +42,8 @@ async def my_points(message: Message, session: AsyncSession, user: User) -> None
         days=fa_digits(days),
     )
     await message.answer(text, reply_markup=inline.points_kb(days))
+    # لاگ فعالیت
+    await activity.log_activity(session, user.id, activity.Actions.VIEW_POINTS)
 
 
 @router.callback_query(inline.PointsCB.filter(F.action == "redeem"))
@@ -85,6 +88,11 @@ async def redeem_points(
     )
     await send_config(call.bot, call.message.chat.id, service, session)
     await call.answer()
+    # لاگ فعالیت
+    await activity.log_activity(
+        session, user.id, activity.Actions.REDEEM_POINTS,
+        {"days": days, "points_spent": callback_data.days}
+    )
 
 
 @router.message(F.text == BTN_INVITE)
@@ -105,4 +113,9 @@ async def invite(message: Message, session: AsyncSession, user: User) -> None:
         text,
         reply_markup=inline.invite_kb(link, share),
         disable_web_page_preview=True,
+    )
+    # لاگ فعالیت
+    await activity.log_activity(
+        session, user.id, activity.Actions.INVITE,
+        {"invited_count": invited}
     )

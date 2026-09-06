@@ -235,3 +235,19 @@ class TrialClaim(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, index=True)
     service_id: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class UserActivity(Base):
+    """لاگ فعالیت کاربران برای ردیابی رفتار در ربات."""
+
+    __tablename__ = "user_activities"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    action: Mapped[str] = mapped_column(String(64), index=True)
+    details: Mapped[str | None] = mapped_column(Text, default=None)  # JSON رشته
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+    user: Mapped["User"] = relationship(viewonly=True)
