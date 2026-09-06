@@ -14,7 +14,9 @@ from app.texts import (
     BTN_BACK,
     BTN_CANCEL,
     BTN_CONFIRM_BUY,
+    BTN_ENTER_PROMO,
     BTN_REJECT,
+    BTN_REMOVE_PROMO,
     BTN_SEND_RECEIPT,
 )
 from app.utils.formatting import days_left_text, fa_digits, money, toman_short, traffic
@@ -23,10 +25,11 @@ from app.utils.formatting import days_left_text, fa_digits, money, toman_short, 
 class BuyCB(CallbackData, prefix="buy"):
     """جریان خرید و تمدید."""
 
-    action: str  # durations | packages | checkout | pay | cancel
+    action: str  # durations | packages | checkout | pay | cancel | promo | remove_promo
     duration_id: int = 0
     package_id: int = 0
-    service_id: int = 0  # غیرصفر یعنی تمدید
+    service_id: int = 0   # غیرصفر یعنی تمدید
+    offer_id: int = 0     # غیرصفر یعنی کد تخفیف اعمال شده
 
 
 class ServiceCB(CallbackData, prefix="srv"):
@@ -96,7 +99,10 @@ def packages_kb(
 
 
 def checkout_kb(
-    duration_id: int, package_id: int, service_id: int = 0
+    duration_id: int,
+    package_id: int,
+    service_id: int = 0,
+    offer_id: int = 0,
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(
@@ -106,9 +112,33 @@ def checkout_kb(
             duration_id=duration_id,
             package_id=package_id,
             service_id=service_id,
+            offer_id=offer_id,
         ),
         style="success",
     )
+    # دکمه کد تخفیف یا حذف تخفیف
+    if offer_id:
+        builder.button(
+            text=BTN_REMOVE_PROMO,
+            callback_data=BuyCB(
+                action="remove_promo",
+                duration_id=duration_id,
+                package_id=package_id,
+                service_id=service_id,
+            ),
+            style="danger",
+        )
+    else:
+        builder.button(
+            text=BTN_ENTER_PROMO,
+            callback_data=BuyCB(
+                action="promo",
+                duration_id=duration_id,
+                package_id=package_id,
+                service_id=service_id,
+            ),
+            style="primary",
+        )
     builder.button(
         text=BTN_BACK,
         callback_data=BuyCB(
@@ -263,17 +293,48 @@ def invite_kb(link: str, share_text: str) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def package_summary(package: Package, duration: Duration) -> str:
-    """خلاصه سفارش برای صفحه تأیید."""
+def package_summary(
+    package: Package,
+    duration: Duration,
+    discount_amount: int = 0,
+    bonus_traffic_mb: int = 0,
+    offer_title: str = "",
+) -> str:
+    """خلاصه سفارش برای صفحه تأیید، با نمایش تخفیف در صورت وجود."""
     lines = [
         "🧾 <b>خلاصه سفارش</b>",
         "",
         f"📦 پکیج: <b>{package.title}</b>",
         f"⏱ مدت: <b>{duration.title}</b>",
-        f"📊 حجم: <b>{traffic(package.traffic_mb)}</b>",
-        f"📱 تعداد دستگاه: <b>{fa_digits(package.device_limit) if package.device_limit else 'نامحدود'}</b>",
     ]
+
+    # حجم — با احتساب بونوس
+    total_traffic_mb = package.traffic_mb + bonus_traffic_mb
+    traffic_str = traffic(total_traffic_mb)
+    if bonus_traffic_mb > 0:
+        lines.append(
+            f"📊 حجم: <b>{traffic_str}</b>  "
+            f"<i>(+{traffic(bonus_traffic_mb)} هدیه 🎁)</i>"
+        )
+    else:
+        lines.append(f"📊 حجم: <b>{traffic_str}</b>")
+
+    lines.append(
+        f"📱 تعداد دستگاه: <b>{fa_digits(package.device_limit) if package.device_limit else 'نامحدود'}</b>"
+    )
+
     if package.description:
         lines.append(f"\n{package.description}")
-    lines += ["", f"💰 مبلغ قابل پرداخت: <b>{money(package.price)} تومان</b>"]
+
+    lines.append("")
+
+    # قیمت — با احتساب تخفیف
+    if discount_amount > 0:
+        final_price = max(0, package.price - discount_amount)
+        lines.append(f"💸 قیمت اصلی: <s>{money(package.price)} تومان</s>")
+        lines.append(f"🏷 تخفیف ({offer_title}): <b>−{money(discount_amount)} تومان</b>")
+        lines.append(f"💰 مبلغ قابل پرداخت: <b>{money(final_price)} تومان</b>")
+    else:
+        lines.append(f"💰 مبلغ قابل پرداخت: <b>{money(package.price)} تومان</b>")
+
     return "\n".join(lines)

@@ -4,7 +4,7 @@ from aiogram.filters.callback_data import CallbackData
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from app.db.models import Duration, Package
+from app.db.models import Duration, Offer, Package
 from app.texts import BTN_BACK
 from app.utils.formatting import fa_digits, money, traffic
 
@@ -26,6 +26,7 @@ def home() -> InlineKeyboardMarkup:
     b.button(text="🎁 تنظیمات تست رایگان", callback_data=AdminCB(action="trial"))
     b.button(text="🏅 تنظیمات امتیاز", callback_data=AdminCB(action="points"))
     b.button(text="🧩 اینباندهای کانفیگ", callback_data=AdminCB(action="multi"))
+    b.button(text="🏷 تخفیف‌ها و پیشنهادها", callback_data=AdminCB(action="offers"))
     b.button(text="👥 کاربران", callback_data=AdminCB(action="users"))
     b.button(text="📊 آمار", callback_data=AdminCB(action="stats"))
     b.button(text="📈 گزارش فعالیت کاربران", callback_data=AdminCB(action="activity"))
@@ -170,13 +171,44 @@ def activity_home_kb() -> InlineKeyboardMarkup:
     b.adjust(1)
     b.row(_back("home"))
     return b.as_markup()
-    b.adjust(1)
-    b.row(_back("home"))
-    return b.as_markup()
 
 
 def back_activity() -> InlineKeyboardMarkup:
     """دکمه بازگشت به صفحه فعالیت."""
     b = InlineKeyboardBuilder()
     b.row(InlineKeyboardButton(text=BTN_BACK, callback_data=AdminCB(action="activity").pack()))
+    return b.as_markup()
+
+
+# ─────────────────────── کیبوردهای تخفیف ────────────────────────────
+
+def offers_list_kb(offer_list: list) -> InlineKeyboardMarkup:
+    """لیست تخفیف‌ها با دکمه مشاهده هر کدام."""
+    b = InlineKeyboardBuilder()
+    for o in offer_list:
+        st = "🟢" if o.is_active else "⚪️"
+        b.button(
+            text=f"{st} #{o.id} {o.title}",
+            callback_data=AdminCB(action="offer_view", arg=o.id),
+        )
+    b.adjust(1)
+    b.row(InlineKeyboardButton(text="➕ تخفیف جدید", callback_data=AdminCB(action="offer_add").pack()))
+    b.row(_back("home"))
+    return b.as_markup()
+
+
+def offer_detail_kb(offer) -> InlineKeyboardMarkup:
+    """دکمه‌های مدیریت یک تخفیف."""
+    b = InlineKeyboardBuilder()
+    toggle_label = "⚪️ غیرفعال‌سازی" if offer.is_active else "🟢 فعال‌سازی"
+    b.button(
+        text=toggle_label,
+        callback_data=AdminCB(action="offer_toggle", arg=offer.id),
+    )
+    b.button(
+        text="🗑 حذف تخفیف",
+        callback_data=AdminCB(action="offer_del_confirm", arg=offer.id),
+    )
+    b.adjust(2)
+    b.row(_back("offers"))
     return b.as_markup()

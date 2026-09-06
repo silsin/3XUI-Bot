@@ -132,6 +132,11 @@ class Order(Base):
     title: Mapped[str] = mapped_column(String(196), default="")
     points_used: Mapped[int] = mapped_column(Integer, default=0)
 
+    # تخفیف اعمال‌شده
+    offer_id: Mapped[int | None] = mapped_column(ForeignKey("offers.id", ondelete="SET NULL"), nullable=True)
+    discount_amount: Mapped[int] = mapped_column(Integer, default=0)    # مبلغ تخفیف (تومان)
+    bonus_traffic_mb: Mapped[int] = mapped_column(Integer, default=0)   # گیگ اضافه
+
     receipt_file_id: Mapped[str | None] = mapped_column(String(256))
     receipt_is_document: Mapped[bool] = mapped_column(Boolean, default=False)
     # پیام‌های رسید ارسال‌شده به ادمین‌ها: JSON از [[chat_id, message_id], ...]
@@ -251,3 +256,64 @@ class UserActivity(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
     user: Mapped["User"] = relationship(viewonly=True)
+
+
+class OfferType(str, enum.Enum):
+    """نوع تخفیف."""
+    PERCENT = "percent"       # درصد تخفیف از قیمت
+    FIXED = "fixed"           # مبلغ ثابت تخفیف (تومان)
+    EXTRA_TRAFFIC = "extra_traffic"  # گیگ اضافه بدون تخفیف قیمت
+
+
+class Offer(Base):
+    """تخفیف‌ها و پیشنهادهای ویژه."""
+
+    __tablename__ = "offers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    # کد تخفیف — None یعنی اعمال خودکار بدون نیاز به کد
+    code: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, default=None)
+
+    title: Mapped[str] = mapped_column(String(128))  # عنوان نمایشی
+    description: Mapped[str] = mapped_column(Text, default="")  # توضیح برای کاربر
+
+    # نوع و مقدار تخفیف
+    offer_type: Mapped[OfferType] = mapped_column(Enum(OfferType), default=OfferType.PERCENT)
+    value: Mapped[int] = mapped_column(Integer, default=0)
+    # برای PERCENT: عدد ۱ تا ۱۰۰ (درصد)
+    # برای FIXED: مبلغ به تومان
+    # برای EXTRA_TRAFFIC: مگابایت اضافه
+
+    # محدودیت استفاده
+    max_uses: Mapped[int] = mapped_column(Integer, default=0)   # 0 = نامحدود
+    used_count: Mapped[int] = mapped_column(Integer, default=0)
+    per_user: Mapped[int] = mapped_column(Integer, default=0)   # حداکثر استفاده هر کاربر (0=نامحدود)
+
+    # فیلتر بر روی بسته/مدت — None یعنی روی همه اعمال می‌شود
+    package_id: Mapped[int | None] = mapped_column(ForeignKey("packages.id", ondelete="SET NULL"), nullable=True)
+    duration_id: Mapped[int | None] = mapped_column(ForeignKey("durations.id", ondelete="SET NULL"), nullable=True)
+
+    # بازه زمانی اعتبار
+    valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    package: Mapped["Package | None"] = relationship(viewonly=True)
+    duration: Mapped["Duration | None"] = relationship(viewonly=True)
+
+
+class OfferUse(Base):
+    """سابقه استفاده از کدهای تخفیف توسط کاربران."""
+
+    __tablename__ = "offer_uses"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    offer_id: Mapped[int] = mapped_column(ForeignKey("offers.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    order_id: Mapped[int | None] = mapped_column(ForeignKey("orders.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    offer: Mapped["Offer"] = relationship(viewonly=True)

@@ -5,6 +5,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 class BuyFlow(StatesGroup):
     waiting_receipt = State()
+    waiting_promo_code = State()  # کاربر در حال وارد کردن کد تخفیف است
 
 
 class AdminFlow(StatesGroup):
@@ -17,6 +18,14 @@ class AdminFlow(StatesGroup):
     broadcast = State()
     user_lookup = State()
     gift_days = State()
+    # مراحل ساخت تخفیف جدید
+    offer_title = State()
+    offer_type = State()
+    offer_value = State()
+    offer_code = State()
+    offer_max_uses = State()
+    offer_per_user = State()
+    offer_valid_days = State()
 
 
 class ActivitySearch(StatesGroup):

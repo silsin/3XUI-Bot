@@ -69,6 +69,13 @@ def _migrate_gb_to_mb(conn) -> None:
         ocols = {c["name"] for c in inspector.get_columns("orders")}
         if "notify_msgs" not in ocols:
             conn.execute(text("ALTER TABLE orders ADD COLUMN notify_msgs TEXT DEFAULT ''"))
+        # ستون‌های سیستم تخفیف
+        if "offer_id" not in ocols:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN offer_id INTEGER REFERENCES offers(id)"))
+        if "discount_amount" not in ocols:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN discount_amount INTEGER DEFAULT 0"))
+        if "bonus_traffic_mb" not in ocols:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN bonus_traffic_mb INTEGER DEFAULT 0"))
     # مهاجرت کلید تنظیمات trial_gb -> trial_mb
     if "settings" in tables:
         row = conn.execute(

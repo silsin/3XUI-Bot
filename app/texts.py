@@ -155,6 +155,16 @@ MSG_ORDER_REJECTED = (
 )
 MSG_CANCELLED = "لغو شد."
 
+# ---------- پیام‌های سیستم تخفیف ----------
+MSG_PROMO_ASK = (
+    "🏷 <b>کد تخفیف</b>\n\n"
+    "کد تخفیف خود را وارد کنید:\n"
+    "(برای انصراف /cancel بزنید)"
+)
+MSG_PROMO_APPLIED = "✅ کد تخفیف <b>{code}</b> اعمال شد!\n{summary}"
+MSG_PROMO_REMOVED = "تخفیف حذف شد."
+MSG_PROMO_INVALID = "❌ {error}"
+
 # ---------- دکمه‌های اینلاین ----------
 BTN_BACK = "🔙 بازگشت"
 BTN_CANCEL = "✖️ انصراف"
@@ -162,3 +172,5 @@ BTN_CONFIRM_BUY = "✅ تأیید و پرداخت"
 BTN_SEND_RECEIPT = "📸 ارسال رسید"
 BTN_APPROVE = "✅ تأیید"
 BTN_REJECT = "❌ رد"
+BTN_ENTER_PROMO = "🏷 دارم کد تخفیف"
+BTN_REMOVE_PROMO = "✖️ حذف تخفیف"
