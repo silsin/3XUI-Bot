@@ -11,12 +11,14 @@ BTN_POINTS = "امتیاز من"
 BTN_GUIDE = "آموزش استفاده"
 BTN_INVITE = "دعوت از دوستان"
 BTN_SUPPORT = "پشتیبانی"
+BTN_MY_WALLET = "💾 کیف داده"
 
 MAIN_BUTTONS = [
     [BTN_TRIAL, BTN_BUY],
     [BTN_RENEW, BTN_MY_SERVICES],
     [BTN_POINTS, BTN_GUIDE],
     [BTN_INVITE, BTN_SUPPORT],
+    [BTN_MY_WALLET],
 ]
 
 # ---------- کلیدهای تنظیمات ----------
@@ -174,3 +176,83 @@ BTN_APPROVE = "✅ تأیید"
 BTN_REJECT = "❌ رد"
 BTN_ENTER_PROMO = "🏷 دارم کد تخفیف"
 BTN_REMOVE_PROMO = "✖️ حذف تخفیف"
+
+# ---------- کیف داده (split & transfer) ----------
+BTN_SPLIT_FOR_SELF = "➕ ساخت کانفیگ جدید برای خودم"
+BTN_SPLIT_FOR_OTHER = "🔁 انتقال به کاربر دیگر"
+BTN_CONFIRM_SPLIT = "✅ تأیید و ساخت"
+BTN_SIZE_1GB  = "۱ GB"
+BTN_SIZE_2GB  = "۲ GB"
+BTN_SIZE_5GB  = "۵ GB"
+BTN_SIZE_10GB = "۱۰ GB"
+BTN_SIZE_20GB = "۲۰ GB"
+BTN_SIZE_CUSTOM = "✏️ مقدار دلخواه"
+
+MSG_WALLET_INTRO = (
+    "💾 <b>کیف داده</b>\n\n"
+    "از این بخش می‌توانید حجم سرویس فعال خود را تقسیم کنید:\n"
+    "• یک کانفیگ جدید <b>برای خودتان</b> بسازید\n"
+    "• یک کانفیگ جدید <b>برای کاربر دیگری</b> بسازید و به او بدهید\n\n"
+    "سرویس فرزند همان تاریخ انقضای سرویس اصلی را خواهد داشت.\n\n"
+    "یکی از سرویس‌های فعال خود را انتخاب کنید:"
+)
+MSG_WALLET_NO_SERVICE = (
+    "⚠️ <b>سرویس قابل تقسیم ندارید.</b>\n\n"
+    "برای تقسیم، سرویس باید:\n"
+    "• فعال و دارای حجم مشخص باشد (نه نامحدود)\n"
+    "• حداقل ۱۰۰ مگابایت موجودی آزاد داشته باشد\n"
+    "• در حال انقضا نباشد"
+)
+MSG_WALLET_SELECT_TYPE = (
+    "📋 <b>سرویس انتخابی:</b> {title}\n"
+    "📊 موجودی آزاد: <b>{available}</b>\n"
+    "⏳ انقضا: <b>{expires}</b>\n\n"
+    "می‌خواهید این حجم را برای چه کسی جدا کنید؟"
+)
+MSG_WALLET_ENTER_SIZE = (
+    "📊 <b>حجم کانفیگ جدید را وارد کنید</b>\n\n"
+    "موجودی آزاد: <b>{available}</b>\n\n"
+    "می‌توانید یکی از دکمه‌های پیش‌نهادی را بزنید یا مستقیم تایپ کنید:\n"
+    "مثال: <code>5gb</code> یا <code>500mb</code> یا <code>2.5gb</code>"
+)
+MSG_WALLET_ENTER_RECIPIENT = (
+    "👤 <b>شناسه تلگرام گیرنده را وارد کنید</b>\n\n"
+    "لطفاً <b>آیدی عددی</b> تلگرام کاربر مورد نظر را بفرستید.\n"
+    "(کاربر باید قبلاً با این ربات صحبت کرده باشد)\n\n"
+    "مثال: <code>123456789</code>"
+)
+MSG_WALLET_CONFIRM_SELF = (
+    "✅ <b>تأیید ساخت کانفیگ</b>\n\n"
+    "📋 سرویس اصلی: <b>{parent_title}</b>\n"
+    "📊 حجم جدا‌شده: <b>{allocated}</b>\n"
+    "📊 باقی‌مانده سرویس اصلی: <b>{remainder}</b>\n"
+    "⏳ انقضا: <b>{expires}</b>\n\n"
+    "آیا تأیید می‌کنید؟"
+)
+MSG_WALLET_CONFIRM_OTHER = (
+    "✅ <b>تأیید انتقال کانفیگ</b>\n\n"
+    "📋 سرویس اصلی: <b>{parent_title}</b>\n"
+    "📊 حجم جدا‌شده: <b>{allocated}</b>\n"
+    "📊 باقی‌مانده سرویس اصلی: <b>{remainder}</b>\n"
+    "⏳ انقضا: <b>{expires}</b>\n"
+    "👤 گیرنده: <b>{recipient_name}</b> (<code>{recipient_id}</code>)\n\n"
+    "آیا تأیید می‌کنید؟"
+)
+MSG_WALLET_PROCESSING = "⏳ در حال ساخت کانفیگ..."
+MSG_WALLET_SUCCESS_SELF = (
+    "🎉 <b>کانفیگ جدید ساخته شد!</b>\n\n"
+    "📊 حجم: <b>{allocated}</b>\n"
+    "📊 موجودی باقی‌مانده سرویس اصلی: <b>{remainder}</b>"
+)
+MSG_WALLET_SUCCESS_OTHER = (
+    "🎉 <b>کانفیگ با موفقیت ساخته و ارسال شد!</b>\n\n"
+    "📊 حجم: <b>{allocated}</b>\n"
+    "👤 گیرنده: <b>{recipient_name}</b>\n"
+    "📊 موجودی باقی‌مانده سرویس اصلی: <b>{remainder}</b>"
+)
+MSG_WALLET_RECIPIENT_NOT_FOUND = (
+    "❌ کاربری با این شناسه پیدا نشد.\n"
+    "مطمئن شوید که کاربر قبلاً با این ربات صحبت کرده باشد.\n"
+    "دوباره وارد کنید یا /cancel بزنید."
+)
+MSG_WALLET_SIZE_ERROR = "❌ {error}\nدوباره وارد کنید یا /cancel بزنید."

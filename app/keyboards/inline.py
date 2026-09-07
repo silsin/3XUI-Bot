@@ -14,10 +14,19 @@ from app.texts import (
     BTN_BACK,
     BTN_CANCEL,
     BTN_CONFIRM_BUY,
+    BTN_CONFIRM_SPLIT,
     BTN_ENTER_PROMO,
     BTN_REJECT,
     BTN_REMOVE_PROMO,
     BTN_SEND_RECEIPT,
+    BTN_SIZE_10GB,
+    BTN_SIZE_1GB,
+    BTN_SIZE_20GB,
+    BTN_SIZE_2GB,
+    BTN_SIZE_5GB,
+    BTN_SIZE_CUSTOM,
+    BTN_SPLIT_FOR_OTHER,
+    BTN_SPLIT_FOR_SELF,
 )
 from app.utils.formatting import days_left_text, fa_digits, money, toman_short, traffic
 
@@ -338,3 +347,144 @@ def package_summary(
         lines.append(f"💰 مبلغ قابل پرداخت: <b>{money(package.price)} تومان</b>")
 
     return "\n".join(lines)
+
+
+# ══════════════════════════════════════════════════════════════════
+#  کیف داده — Split & Transfer
+# ══════════════════════════════════════════════════════════════════
+
+class WalletCB(CallbackData, prefix="wlt"):
+    """جریان تقسیم سرویس."""
+
+    action: str   # select_service | set_type | set_size | enter_custom
+                  # enter_recipient | confirm | cancel
+    service_id: int = 0      # سرویس والد انتخاب‌شده
+    for_other: int = 0       # 0=برای خودم، 1=برای کاربر دیگر
+    allocated_mb: int = 0    # حجم جدا‌شده (مگابایت)
+    recipient_id: int = 0    # آیدی تلگرام گیرنده (انتقال)
+
+
+def wallet_services_kb(services: list) -> InlineKeyboardMarkup:
+    """لیست سرویس‌های قابل تقسیم."""
+    from app.services.wallet_service import available_mb
+    from app.utils.formatting import traffic
+
+    builder = InlineKeyboardBuilder()
+    for svc in services:
+        avail = available_mb(svc)
+        builder.button(
+            text=f"🔹 {svc.title}  ({traffic(avail)} آزاد)",
+            callback_data=WalletCB(action="select_service", service_id=svc.id),
+        )
+    builder.adjust(1)
+    builder.row(
+        InlineKeyboardButton(
+            text=BTN_CANCEL,
+            callback_data=WalletCB(action="cancel").pack(),
+        )
+    )
+    return builder.as_markup()
+
+
+def wallet_type_kb(service_id: int) -> InlineKeyboardMarkup:
+    """انتخاب: برای خودم یا انتقال به دیگری."""
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text=BTN_SPLIT_FOR_SELF,
+        callback_data=WalletCB(action="set_type", service_id=service_id, for_other=0),
+    )
+    builder.button(
+        text=BTN_SPLIT_FOR_OTHER,
+        callback_data=WalletCB(action="set_type", service_id=service_id, for_other=1),
+    )
+    builder.button(
+        text=BTN_BACK,
+        callback_data=WalletCB(action="select_service", service_id=0),
+    )
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+# حجم‌های پیش‌فرض (label → MB)
+_QUICK_SIZES: list[tuple[str, int]] = [
+    (BTN_SIZE_1GB, 1024),
+    (BTN_SIZE_2GB, 2048),
+    (BTN_SIZE_5GB, 5120),
+    (BTN_SIZE_10GB, 10240),
+    (BTN_SIZE_20GB, 20480),
+]
+
+
+def wallet_size_kb(
+    service_id: int,
+    for_other: int,
+    available_mb_val: int,
+) -> InlineKeyboardMarkup:
+    """دکمه‌های حجم سریع + دکمه مقدار دلخواه.
+
+    دکمه‌هایی که بیشتر از موجودی هستند نمایش داده نمی‌شوند.
+    """
+    builder = InlineKeyboardBuilder()
+    shown = 0
+    for label, mb in _QUICK_SIZES:
+        if mb <= available_mb_val:
+            builder.button(
+                text=label,
+                callback_data=WalletCB(
+                    action="set_size",
+                    service_id=service_id,
+                    for_other=for_other,
+                    allocated_mb=mb,
+                ),
+            )
+            shown += 1
+
+    builder.button(
+        text=BTN_SIZE_CUSTOM,
+        callback_data=WalletCB(
+            action="enter_custom",
+            service_id=service_id,
+            for_other=for_other,
+        ),
+    )
+    # چیدمان: ۲ ستون برای دکمه‌های سریع، مقدار دلخواه تک‌ردیف
+    if shown:
+        cols = [2] * (shown // 2) + ([1] if shown % 2 else [])
+    else:
+        cols = []
+    builder.adjust(*cols, 1)
+    builder.row(
+        InlineKeyboardButton(
+            text=BTN_BACK,
+            callback_data=WalletCB(
+                action="select_service", service_id=service_id
+            ).pack(),
+        )
+    )
+    return builder.as_markup()
+
+
+def wallet_confirm_kb(
+    service_id: int,
+    for_other: int,
+    allocated_mb: int,
+    recipient_id: int = 0,
+) -> InlineKeyboardMarkup:
+    """تأیید نهایی."""
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text=BTN_CONFIRM_SPLIT,
+        callback_data=WalletCB(
+            action="confirm",
+            service_id=service_id,
+            for_other=for_other,
+            allocated_mb=allocated_mb,
+            recipient_id=recipient_id,
+        ),
+    )
+    builder.button(
+        text=BTN_CANCEL,
+        callback_data=WalletCB(action="cancel"),
+    )
+    builder.adjust(1)
+    return builder.as_markup()

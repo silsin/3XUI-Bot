@@ -1,6 +1,6 @@
 from aiogram import Router
 
-from app.handlers import buy, common, misc, points, services, trial
+from app.handlers import buy, common, misc, points, services, trial, wallet
 from app.handlers.admin import get_admin_router
 
 
@@ -16,6 +16,7 @@ def get_root_router() -> Router:
     root.include_router(buy.router)
     root.include_router(services.router)
     root.include_router(points.router)
+    root.include_router(wallet.router)
     root.include_router(misc.router)
 
     # fallback باید آخر باشد

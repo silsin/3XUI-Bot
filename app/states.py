@@ -28,5 +28,19 @@ class AdminFlow(StatesGroup):
     offer_valid_days = State()
 
 
+class WalletFlow(StatesGroup):
+    # ── مرحله ۱: انتخاب سرویس والد (از طریق inline keyboard)
+    # (بدون state — مستقیم با callback شروع می‌شود)
+
+    # ── مرحله ۲: ورود حجم (برای خودم یا انتقال)
+    entering_size = State()        # کاربر حجم را تایپ می‌کند
+
+    # ── مرحله ۳ (انتقال): ورود آیدی تلگرام گیرنده
+    entering_recipient = State()   # کاربر آیدی عددی تلگرام گیرنده را تایپ می‌کند
+
+    # ── مرحله ۴: تأیید نهایی (inline keyboard)
+    confirming = State()           # نمایش خلاصه و دکمه تأیید/لغو
+
+
 class ActivitySearch(StatesGroup):
     waiting_user_id = State()

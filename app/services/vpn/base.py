@@ -62,6 +62,18 @@ class VpnProvider(Protocol):
         reset_traffic: bool = False,
     ) -> None: ...
 
+    async def set_quota_mb(
+        self,
+        inbound_id: int,
+        client_uuid: str,
+        email: str,
+        traffic_mb: int,
+    ) -> None:
+        """سهمیه ترافیک کلاینت را به مقدار مطلق (مگابایت) تنظیم می‌کند.
+        0 یعنی نامحدود.
+        """
+        ...
+
     async def get_usage(self, email: str) -> UsageInfo: ...
 
     async def get_all_usage(self) -> dict[str, UsageInfo]: ...

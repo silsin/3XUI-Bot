@@ -14,6 +14,7 @@ from app.db.models import (
     Order,
     Service,
     ServiceClient,
+    ServiceSplit,
     ServiceStatus,
     TrialClaim,
     User,
@@ -313,3 +314,149 @@ async def sync_service(
 
 # سازگاری با کد قدیمی
 sync_usage = sync_service
+
+
+async def split_service(
+    session: AsyncSession,
+    *,
+    parent: Service,
+    allocated_mb: int,
+    recipient: User,
+    title: str = "",
+) -> Service:
+    """از سرویس والد (parent) حجم جدا می‌کند و سرویس فرزند (child) می‌سازد.
+
+    - سهمیه‌ی parent به‌اندازه allocated_mb کاهش می‌یابد (روی پنل).
+    - یک سرویس جدید با همان تاریخ انقضا برای recipient ساخته می‌شود.
+    - رابطه در ServiceSplit ثبت می‌شود.
+    """
+    if allocated_mb <= 0:
+        raise VpnError("حجم باید بزرگ‌تر از صفر باشد.")
+
+    # بارگذاری با کلاینت‌ها
+    parent = await _load_service(session, parent.id) or parent
+
+    if parent.traffic_mb > 0 and allocated_mb > parent.traffic_mb:
+        raise VpnError(
+            f"حجم درخواستی ({allocated_mb} MB) از موجودی سرویس "
+            f"({parent.traffic_mb} MB) بیشتر است."
+        )
+
+    provider = get_provider()
+    inbounds = await resolve_inbounds(session, parent.inbound_id)
+
+    # ── کاهش سهمیه سرویس والد روی پنل ──────────────────────────
+    new_parent_mb = max(0, parent.traffic_mb - allocated_mb)
+    for client in parent.clients:
+        try:
+            await provider.set_quota_mb(
+                inbound_id=client.inbound_id,
+                client_uuid=client.client_uuid,
+                email=client.email,
+                traffic_mb=new_parent_mb,
+            )
+        except VpnError as exc:
+            logger.warning("reduce quota failed for %s: %s", client.email, exc)
+
+    parent.traffic_mb = new_parent_mb
+    await session.flush()
+
+    # ── ساخت سرویس فرزند ──────────────────────────────────────────
+    child_title = title or f"زیرسرویس {allocated_mb} MB"
+    # محاسبه روزهای باقی‌مانده از سرویس والد
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    if parent.expires_at is not None:
+        exp = parent.expires_at
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        remaining_days = max(0, (exp - now).days)
+    else:
+        remaining_days = 0  # نامحدود → 0 به معنی نامحدود در create_service
+
+    base = f"{recipient.id}-split-{secrets.token_hex(3)}"
+    sub_id = secrets.token_hex(8)
+
+    created: list = []
+    for inb in inbounds:
+        email = f"{base}-i{inb}"
+        try:
+            res = await provider.create_client(
+                inbound_id=inb,
+                email=email,
+                days=remaining_days,
+                traffic_mb=allocated_mb,
+                device_limit=0,
+                telegram_id=recipient.id,
+                sub_id=sub_id,
+            )
+            created.append(res)
+        except VpnError as exc:
+            logger.error("split create_client failed on inbound %s: %s", inb, exc)
+
+    if not created:
+        # برگرداندن سهمیه والد در صورت شکست
+        parent.traffic_mb = parent.traffic_mb + allocated_mb
+        for client in parent.clients:
+            try:
+                await provider.set_quota_mb(
+                    inbound_id=client.inbound_id,
+                    client_uuid=client.client_uuid,
+                    email=client.email,
+                    traffic_mb=parent.traffic_mb,
+                )
+            except VpnError:
+                pass
+        await session.flush()
+        raise VpnError("ساخت سرویس فرزند روی پنل ناموفق بود.")
+
+    primary = created[0]
+    child = Service(
+        user_id=recipient.id,
+        order_id=None,
+        title=child_title,
+        inbound_id=primary.inbound_id,
+        client_uuid=primary.uuid,
+        email=primary.email,
+        sub_id=sub_id,
+        config_link=primary.config_link,
+        sub_link=primary.sub_link,
+        traffic_mb=allocated_mb,
+        expires_at=parent.expires_at,   # همان تاریخ انقضای والد
+        is_trial=False,
+        status=ServiceStatus.ACTIVE,
+    )
+    session.add(child)
+    await session.flush()
+
+    for res in created:
+        session.add(
+            ServiceClient(
+                service_id=child.id,
+                inbound_id=res.inbound_id,
+                protocol=res.protocol,
+                label=(res.protocol or "config").upper(),
+                client_uuid=res.uuid,
+                email=res.email,
+                config_link=res.config_link,
+                enabled=True,
+            )
+        )
+
+    # ثبت رابطه split
+    session.add(
+        ServiceSplit(
+            parent_service_id=parent.id,
+            child_service_id=child.id,
+            allocated_mb=allocated_mb,
+            recipient_user_id=recipient.id,
+        )
+    )
+
+    await session.commit()
+    await session.refresh(child)
+    logger.info(
+        "split: parent=%s -%dMB → child=%s for user=%s",
+        parent.id, allocated_mb, child.id, recipient.id,
+    )
+    return child

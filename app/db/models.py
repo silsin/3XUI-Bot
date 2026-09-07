@@ -242,6 +242,32 @@ class TrialClaim(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class ServiceSplit(Base):
+    """ردیابی تقسیم (split) یک سرویس به زیرسرویس‌های کوچک‌تر.
+
+    وقتی کاربر از سرویس اصلی خود (parent) حجم جدا می‌کند، یک سرویس
+    فرزند (child) ساخته می‌شود و این رکورد رابطه آن‌ها را نگه می‌دارد.
+    """
+
+    __tablename__ = "service_splits"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    parent_service_id: Mapped[int] = mapped_column(
+        ForeignKey("services.id", ondelete="CASCADE"), index=True
+    )
+    child_service_id: Mapped[int] = mapped_column(
+        ForeignKey("services.id", ondelete="CASCADE"), index=True, unique=True
+    )
+    allocated_mb: Mapped[int] = mapped_column(Integer)          # حجم جدا شده (مگابایت)
+    recipient_user_id: Mapped[int | None] = mapped_column(      # گیرنده (خودش یا کاربر دیگر)
+        BigInteger, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    parent_service: Mapped["Service"] = relationship(foreign_keys=[parent_service_id])
+    child_service: Mapped["Service"] = relationship(foreign_keys=[child_service_id])
+
+
 class UserActivity(Base):
     """لاگ فعالیت کاربران برای ردیابی رفتار در ربات."""
 

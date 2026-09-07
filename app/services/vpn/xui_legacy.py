@@ -248,6 +248,22 @@ class XuiLegacyClient:
         )
         # نکته: نسخه ۱.x endpoint ریست مصرف ندارد؛ شمارنده مصرف قبلی باقی می‌ماند.
 
+    async def set_quota_mb(
+        self,
+        inbound_id: int,
+        client_uuid: str,
+        email: str,
+        traffic_mb: int,
+    ) -> None:
+        """سهمیه را به مقدار مطلق (مگابایت) تنظیم می‌کند؛ 0 = نامحدود."""
+        inbound = await self.get_inbound(inbound_id)
+        client = dict(self._find_client(inbound, client_uuid, email))
+        client["totalGB"] = max(traffic_mb, 0) * MB
+        await self._post(
+            f"/xui/inbound/updateClient/{client_uuid}",
+            data={"id": inbound_id, "settings": json.dumps({"clients": [client]})},
+        )
+
     async def set_enabled(
         self, inbound_id: int, client_uuid: str, email: str, enabled: bool
     ) -> None:
