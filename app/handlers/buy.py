@@ -92,7 +92,8 @@ async def start_buy(message: Message, session: AsyncSession, state: FSMContext) 
 
 
 @router.message(F.text == BTN_RENEW)
-async def start_renew(message: Message, session: AsyncSession, user: User) -> None:
+async def start_renew(message: Message, session: AsyncSession, user: User, state: FSMContext) -> None:
+    await state.clear()
     services = list(
         (
             await session.execute(
@@ -243,12 +244,13 @@ async def create_order(
 
 
 @router.callback_query(F.data.startswith("receipt:cancel:"))
-async def receipt_cancel(call: CallbackQuery, session: AsyncSession) -> None:
+async def receipt_cancel(call: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
     order_id = int(call.data.split(":")[2])
     order = await session.get(Order, order_id)
     if order and order.status == OrderStatus.AWAITING_RECEIPT:
         order.status = OrderStatus.CANCELLED
         await session.commit()
+    await state.clear()
     await call.message.edit_text(MSG_CANCELLED)
     await call.answer()
 
