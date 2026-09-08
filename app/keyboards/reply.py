@@ -48,7 +48,7 @@ def main_menu(is_admin: bool = False) -> ReplyKeyboardMarkup:
     if is_admin:
         builder.row(_btn(ADMIN_BUTTON))
     return builder.as_markup(
-        resize_keyboard=True,
+        resize_keyboard=False,
         input_field_placeholder="یک گزینه را انتخاب کنید...",
     )
 
