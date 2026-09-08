@@ -43,10 +43,12 @@ def _btn(text: str) -> KeyboardButton:
 def main_menu(is_admin: bool = False) -> ReplyKeyboardMarkup:
     """کیبورد پایین اصلی با دکمه‌های رنگی."""
     builder = ReplyKeyboardBuilder()
-    for row in MAIN_BUTTONS:
-        builder.row(*(_btn(text) for text in row))
+    rows = list(MAIN_BUTTONS)
     if is_admin:
-        builder.row(_btn(ADMIN_BUTTON))
+        # دکمه ادمین را به ردیف آخر اضافه می‌کند تا ردیف جدید نسازد
+        rows = rows[:-1] + [rows[-1] + [ADMIN_BUTTON]]
+    for row in rows:
+        builder.row(*(_btn(text) for text in row))
     return builder.as_markup(
         resize_keyboard=False,
         input_field_placeholder="یک گزینه را انتخاب کنید...",
