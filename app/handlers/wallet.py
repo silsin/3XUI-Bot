@@ -1,4 +1,12 @@
-"""هندلر کیف داده — تقسیم سرویس و انتقال به کاربر دیگر."""
+"""تقسیم سرویس و انتقال به کاربر دیگر (ساده‌شده).
+
+جریان:
+1. کاربر روی دکمه "تقسیم این کانفیگ" در سرویس detail زد
+2. دکمه‌های اندازه نمایش داده می‌شوند
+3. کاربر اندازه را انتخاب می‌کند → سؤال: برای خودم یا دیگری؟
+4. برای دیگری → ورود @username → تأیید
+5. برای خودم → تأیید مستقیم
+"""
 
 from __future__ import annotations
 
@@ -16,18 +24,13 @@ from app.services import activity_service as activity
 from app.services import wallet_service as wallet
 from app.states import WalletFlow
 from app.texts import (
-    BTN_MY_WALLET,
     MSG_CANCELLED,
     MSG_WALLET_CONFIRM_OTHER,
     MSG_WALLET_CONFIRM_SELF,
-    MSG_WALLET_ENTER_RECIPIENT,
-    MSG_WALLET_ENTER_SIZE,
     MSG_WALLET_INTRO,
-    MSG_WALLET_NO_SERVICE,
     MSG_WALLET_PROCESSING,
     MSG_WALLET_RECIPIENT_NOT_FOUND,
     MSG_WALLET_SELECT_TYPE,
-    MSG_WALLET_SIZE_ERROR,
     MSG_WALLET_SUCCESS_OTHER,
     MSG_WALLET_SUCCESS_SELF,
 )
@@ -36,61 +39,19 @@ from app.utils.formatting import days_left_text, fa_digits, jalali_date, traffic
 logger = logging.getLogger(__name__)
 router = Router(name="wallet")
 
-# ─────────────────────── کمک‌های نمایشی ───────────────────────────
-
-
-def _traffic(mb: int) -> str:
-    return traffic(mb)
-
-
-def _expires(service: Service) -> str:
-    return jalali_date(service.expires_at)
-
 
 # ══════════════════════════════════════════════════════════════════
-#  ورود: دکمه «کیف داده»
+#  Step 1: Entry point (from service detail view)
 # ══════════════════════════════════════════════════════════════════
 
-@router.message(F.text == BTN_MY_WALLET)
-async def wallet_entry(
-    message: Message, session: AsyncSession, user: User, state: FSMContext
-) -> None:
-    await state.clear()
-    services = await wallet.get_splittable_services(session, user.id)
-    if not services:
-        await message.answer(MSG_WALLET_NO_SERVICE)
-        return
-    await message.answer(MSG_WALLET_INTRO, reply_markup=inline.wallet_services_kb(services))
-    await activity.log_activity(session, user.id, "wallet_entry")
-
-
-# ══════════════════════════════════════════════════════════════════
-#  مرحله ۱: انتخاب سرویس والد
-# ══════════════════════════════════════════════════════════════════
-
-@router.callback_query(inline.WalletCB.filter(F.action == "select_service"))
-async def select_service(
+@router.callback_query(inline.WalletCB.filter(F.action == "start_split"))
+async def start_split(
     call: CallbackQuery,
     callback_data: inline.WalletCB,
     session: AsyncSession,
     user: User,
-    state: FSMContext,
 ) -> None:
-    # اگر service_id=0 باشد یعنی «بازگشت» از صفحه بعدی زده شده
-    if callback_data.service_id == 0:
-        await state.clear()
-        services = await wallet.get_splittable_services(session, user.id)
-        if not services:
-            await call.message.edit_text(MSG_WALLET_NO_SERVICE)
-            await call.answer()
-            return
-        await call.message.edit_text(
-            MSG_WALLET_INTRO,
-            reply_markup=inline.wallet_services_kb(services),
-        )
-        await call.answer()
-        return
-
+    """کاربر روی دکمه تقسیم سرویس زد."""
     service = await session.get(Service, callback_data.service_id)
     if service is None or service.user_id != user.id:
         await call.answer("سرویس یافت نشد.", show_alert=True)
@@ -99,58 +60,29 @@ async def select_service(
     avail = wallet.available_mb(service)
     text = MSG_WALLET_SELECT_TYPE.format(
         title=service.title,
-        available=_traffic(avail),
-        expires=_expires(service),
+        available=traffic(avail),
+        expires=jalali_date(service.expires_at),
     )
     await call.message.edit_text(
         text,
-        reply_markup=inline.wallet_type_kb(service.id),
+        reply_markup=inline.wallet_size_kb(service.id, avail),
     )
     await call.answer()
+    await activity.log_activity(session, user.id, "wallet_start_split", {"service_id": service.id})
 
 
 # ══════════════════════════════════════════════════════════════════
-#  مرحله ۲: انتخاب نوع (برای خودم / دیگری)
+#  Step 2: Select size → ask for self or other
 # ══════════════════════════════════════════════════════════════════
 
-@router.callback_query(inline.WalletCB.filter(F.action == "set_type"))
-async def set_type(
+@router.callback_query(inline.WalletCB.filter(F.action == "select_size"))
+async def select_size(
     call: CallbackQuery,
     callback_data: inline.WalletCB,
     session: AsyncSession,
     user: User,
-    state: FSMContext,
 ) -> None:
-    service = await session.get(Service, callback_data.service_id)
-    if service is None or service.user_id != user.id:
-        await call.answer("سرویس یافت نشد.", show_alert=True)
-        return
-
-    avail = wallet.available_mb(service)
-    text = MSG_WALLET_ENTER_SIZE.format(available=_traffic(avail))
-    await call.message.edit_text(
-        text,
-        reply_markup=inline.wallet_size_kb(
-            service_id=service.id,
-            for_other=callback_data.for_other,
-            available_mb_val=avail,
-        ),
-    )
-    await call.answer()
-
-
-# ══════════════════════════════════════════════════════════════════
-#  مرحله ۳الف: انتخاب حجم از دکمه‌های سریع
-# ══════════════════════════════════════════════════════════════════
-
-@router.callback_query(inline.WalletCB.filter(F.action == "set_size"))
-async def set_size_quick(
-    call: CallbackQuery,
-    callback_data: inline.WalletCB,
-    session: AsyncSession,
-    user: User,
-    state: FSMContext,
-) -> None:
+    """کاربر اندازه را انتخاب کرد — اکنون انتخاب می‌کند برای خودم یا دیگری."""
     service = await session.get(Service, callback_data.service_id)
     if service is None or service.user_id != user.id:
         await call.answer("سرویس یافت نشد.", show_alert=True)
@@ -162,233 +94,20 @@ async def set_size_quick(
         await call.answer(err, show_alert=True)
         return
 
-    await _show_confirm(
-        call=call,
-        session=session,
-        user=user,
-        state=state,
-        service=service,
-        allocated_mb=allocated_mb,
-        for_other=callback_data.for_other,
-        recipient_id=0,
-    )
-
-
-# ══════════════════════════════════════════════════════════════════
-#  مرحله ۳ب: ورود مقدار دلخواه (متن)
-# ══════════════════════════════════════════════════════════════════
-
-@router.callback_query(inline.WalletCB.filter(F.action == "enter_custom"))
-async def ask_custom_size(
-    call: CallbackQuery,
-    callback_data: inline.WalletCB,
-    session: AsyncSession,
-    state: FSMContext,
-) -> None:
-    service = await session.get(Service, callback_data.service_id)
-    if service is None:
-        await call.answer("سرویس یافت نشد.", show_alert=True)
-        return
-    avail = wallet.available_mb(service)
-    await state.set_state(WalletFlow.entering_size)
-    await state.update_data(
-        service_id=callback_data.service_id,
-        for_other=callback_data.for_other,
-    )
+    # سؤال: برای خودم یا دیگری؟
     await call.message.edit_text(
-        MSG_WALLET_ENTER_SIZE.format(available=_traffic(avail))
-        + "\n\n✏️ مقدار دلخواه را تایپ کنید:"
-    )
-    await call.answer()
-
-
-@router.message(WalletFlow.entering_size)
-async def receive_custom_size(
-    message: Message,
-    session: AsyncSession,
-    user: User,
-    state: FSMContext,
-) -> None:
-    data = await state.get_data()
-    service_id = data.get("service_id", 0)
-    for_other = data.get("for_other", 0)
-
-    service = await session.get(Service, service_id)
-    if service is None or service.user_id != user.id:
-        await state.clear()
-        await message.answer("سرویس یافت نشد.")
-        return
-
-    mb, parse_err = wallet.parse_size_input(message.text or "")
-    if parse_err:
-        await message.answer(MSG_WALLET_SIZE_ERROR.format(error=parse_err))
-        return
-
-    err = await wallet.validate_split(session, service, mb, user.id)
-    if err:
-        await message.answer(MSG_WALLET_SIZE_ERROR.format(error=err))
-        return
-
-    await state.clear()
-
-    if for_other:
-        # نیاز به آیدی گیرنده داریم
-        await state.set_state(WalletFlow.entering_recipient)
-        await state.update_data(service_id=service_id, allocated_mb=mb, for_other=1)
-        await message.answer(MSG_WALLET_ENTER_RECIPIENT)
-    else:
-        # تأیید مستقیم برای خودم
-        avail = wallet.available_mb(service)
-        remainder = avail - mb
-        text = MSG_WALLET_CONFIRM_SELF.format(
-            parent_title=service.title,
-            allocated=_traffic(mb),
-            remainder=_traffic(remainder),
-            expires=_expires(service),
-        )
-        await message.answer(
-            text,
-            reply_markup=inline.wallet_confirm_kb(
-                service_id=service_id,
-                for_other=0,
-                allocated_mb=mb,
-            ),
-        )
-
-
-# ══════════════════════════════════════════════════════════════════
-#  کمک: نمایش صفحه تأیید (از quick-size یا custom)
-# ══════════════════════════════════════════════════════════════════
-
-async def _show_confirm(
-    *,
-    call: CallbackQuery,
-    session: AsyncSession,
-    user: User,
-    state: FSMContext,
-    service: Service,
-    allocated_mb: int,
-    for_other: int,
-    recipient_id: int,
-) -> None:
-    avail = wallet.available_mb(service)
-    remainder = avail - allocated_mb
-
-    if for_other and recipient_id == 0:
-        # باید آیدی گیرنده گرفته شود — وارد state می‌کنیم
-        await state.set_state(WalletFlow.entering_recipient)
-        await state.update_data(
-            service_id=service.id,
-            allocated_mb=allocated_mb,
-            for_other=1,
-        )
-        await call.message.edit_text(MSG_WALLET_ENTER_RECIPIENT)
-        await call.answer()
-        return
-
-    if for_other and recipient_id:
-        recipient = await wallet.get_user_by_telegram_id(session, recipient_id)
-        r_name = (
-            recipient.first_name or str(recipient_id)
-            if recipient else str(recipient_id)
-        )
-        text = MSG_WALLET_CONFIRM_OTHER.format(
-            parent_title=service.title,
-            allocated=_traffic(allocated_mb),
-            remainder=_traffic(remainder),
-            expires=_expires(service),
-            recipient_name=r_name,
-            recipient_id=recipient_id,
-        )
-    else:
-        text = MSG_WALLET_CONFIRM_SELF.format(
-            parent_title=service.title,
-            allocated=_traffic(allocated_mb),
-            remainder=_traffic(remainder),
-            expires=_expires(service),
-        )
-
-    await call.message.edit_text(
-        text,
-        reply_markup=inline.wallet_confirm_kb(
-            service_id=service.id,
-            for_other=for_other,
-            allocated_mb=allocated_mb,
-            recipient_id=recipient_id,
-        ),
+        "برای چه کسی این کانفیگ را ایجاد کنم؟",
+        reply_markup=inline.wallet_recipient_kb(service.id, allocated_mb),
     )
     await call.answer()
 
 
 # ══════════════════════════════════════════════════════════════════
-#  مرحله ۴ (انتقال): ورود آیدی گیرنده
+#  Step 4A: For self — direct confirmation
 # ══════════════════════════════════════════════════════════════════
 
-@router.message(WalletFlow.entering_recipient)
-async def receive_recipient(
-    message: Message,
-    session: AsyncSession,
-    user: User,
-    state: FSMContext,
-) -> None:
-    data = await state.get_data()
-    service_id = data.get("service_id", 0)
-    allocated_mb = data.get("allocated_mb", 0)
-
-    raw = (message.text or "").strip()
-    if not raw.lstrip("-").isdigit():
-        await message.answer(MSG_WALLET_RECIPIENT_NOT_FOUND)
-        return
-
-    recipient_id = int(raw)
-    if recipient_id == user.id:
-        await message.answer(
-            "❌ نمی‌توانید به خودتان انتقال دهید. "
-            "از گزینه «ساخت کانفیگ جدید برای خودم» استفاده کنید."
-        )
-        return
-
-    recipient = await wallet.get_user_by_telegram_id(session, recipient_id)
-    if recipient is None:
-        await message.answer(MSG_WALLET_RECIPIENT_NOT_FOUND)
-        return
-
-    service = await session.get(Service, service_id)
-    if service is None or service.user_id != user.id:
-        await state.clear()
-        await message.answer("سرویس یافت نشد.")
-        return
-
-    await state.clear()
-
-    avail = wallet.available_mb(service)
-    remainder = avail - allocated_mb
-    r_name = recipient.first_name or str(recipient_id)
-    text = MSG_WALLET_CONFIRM_OTHER.format(
-        parent_title=service.title,
-        allocated=_traffic(allocated_mb),
-        remainder=_traffic(remainder),
-        expires=_expires(service),
-        recipient_name=r_name,
-        recipient_id=recipient_id,
-    )
-    await message.answer(
-        text,
-        reply_markup=inline.wallet_confirm_kb(
-            service_id=service_id,
-            for_other=1,
-            allocated_mb=allocated_mb,
-            recipient_id=recipient_id,
-        ),
-    )
-
-
-# ══════════════════════════════════════════════════════════════════
-#  مرحله نهایی: تأیید و اجرا
-# ══════════════════════════════════════════════════════════════════
-
-@router.callback_query(inline.WalletCB.filter(F.action == "confirm"))
-async def confirm_split(
+@router.callback_query(inline.WalletCB.filter(F.action == "confirm_self"))
+async def confirm_for_self(
     call: CallbackQuery,
     callback_data: inline.WalletCB,
     session: AsyncSession,
@@ -396,6 +115,7 @@ async def confirm_split(
     state: FSMContext,
     bot: Bot,
 ) -> None:
+    """کاربر تأیید کرد برای خودش."""
     await state.clear()
 
     service = await session.get(Service, callback_data.service_id)
@@ -404,19 +124,231 @@ async def confirm_split(
         return
 
     allocated_mb = callback_data.allocated_mb
-    for_other = bool(callback_data.for_other)
+    avail = wallet.available_mb(service)
+    remainder = avail - allocated_mb
+
+    text = MSG_WALLET_CONFIRM_SELF.format(
+        parent_title=service.title,
+        allocated=traffic(allocated_mb),
+        remainder=traffic(remainder),
+        expires=jalali_date(service.expires_at),
+    )
+
+    await call.message.edit_text(
+        text,
+        reply_markup=inline.wallet_confirm_kb(
+            service.id, allocated_mb, recipient_username=None
+        ),
+    )
+    await call.answer()
+
+
+# ══════════════════════════════════════════════════════════════════
+#  Step 4B: For other — ask for username
+# ══════════════════════════════════════════════════════════════════
+
+@router.callback_query(inline.WalletCB.filter(F.action == "ask_recipient"))
+async def ask_recipient_username(
+    call: CallbackQuery,
+    callback_data: inline.WalletCB,
+    state: FSMContext,
+) -> None:
+    """کاربر برای دیگری انتخاب کرد — منتظر ورود username."""
+    await state.set_state(WalletFlow.confirming)
+    await state.update_data(
+        service_id=callback_data.service_id,
+        allocated_mb=callback_data.allocated_mb,
+        for_other=True,
+    )
+    await call.message.edit_text(
+        "👤 <b>نام‌کاربری گیرنده را وارد کنید</b>\n\n"
+        "مثال: <code>john</code> یا <code>@john</code>"
+    )
+    await call.answer()
+
+
+@router.message(WalletFlow.confirming)
+async def receive_recipient_username(
+    message: Message,
+    session: AsyncSession,
+    user: User,
+    state: FSMContext,
+    bot: Bot,
+) -> None:
+    """دریافت username و نمایش تأیید."""
+    data = await state.get_data()
+    service_id = data.get("service_id", 0)
+    allocated_mb = data.get("allocated_mb", 0)
+    for_other = data.get("for_other", False)
+
+    if not for_other:
+        # این برای خودم است (تأیید مستقیم)
+        await state.clear()
+        service = await session.get(Service, service_id)
+        if service is None or service.user_id != user.id:
+            await message.answer("سرویس یافت نشد.")
+            return
+        await _execute_split_for_self(
+            message, session, user, service, allocated_mb, bot
+        )
+        return
+
+    # برای دیگری — جستجوی username
+    recipient_username = (message.text or "").strip()
+    recipient = await wallet.get_user_by_username(session, recipient_username)
+    if recipient is None:
+        await message.answer(MSG_WALLET_RECIPIENT_NOT_FOUND)
+        return
+
+    if recipient.id == user.id:
+        await message.answer(
+            "❌ نمی‌توانید برای خودتان انتقال دهید. "
+            "از گزینه «ساخت کانفیگ برای خودم» استفاده کنید."
+        )
+        return
+
+    await state.clear()
+    service = await session.get(Service, service_id)
+    if service is None or service.user_id != user.id:
+        await message.answer("سرویس یافت نشد.")
+        return
+
+    avail = wallet.available_mb(service)
+    remainder = avail - allocated_mb
+    r_name = recipient.first_name or recipient_username
+
+    text = MSG_WALLET_CONFIRM_OTHER.format(
+        parent_title=service.title,
+        allocated=traffic(allocated_mb),
+        remainder=traffic(remainder),
+        expires=jalali_date(service.expires_at),
+        recipient_name=r_name,
+        recipient_id=recipient.id,
+    )
+
+    await message.answer(
+        text,
+        reply_markup=inline.wallet_confirm_kb(
+            service.id, allocated_mb, recipient_username=recipient_username, 
+            recipient_id=recipient.id
+        ),
+    )
+
+
+# ══════════════════════════════════════════════════════════════════
+#  Final: Execute split
+# ══════════════════════════════════════════════════════════════════
+
+@router.callback_query(inline.WalletCB.filter(F.action == "execute"))
+async def execute_split(
+    call: CallbackQuery,
+    callback_data: inline.WalletCB,
+    session: AsyncSession,
+    user: User,
+    state: FSMContext,
+    bot: Bot,
+) -> None:
+    """اجرای تقسیم و ارسال کانفیگ."""
+    await state.clear()
+
+    service = await session.get(Service, callback_data.service_id)
+    if service is None or service.user_id != user.id:
+        await call.answer("سرویس یافت نشد.", show_alert=True)
+        return
+
+    allocated_mb = callback_data.allocated_mb
     recipient_id = callback_data.recipient_id
 
-    # تعیین گیرنده
-    if for_other:
-        recipient = await wallet.get_user_by_telegram_id(session, recipient_id)
-        if recipient is None:
-            await call.answer("کاربر گیرنده یافت نشد.", show_alert=True)
-            return
+    if recipient_id == 0:
+        # برای خودم
+        await _execute_split_for_self(
+            call.message, session, user, service, allocated_mb, bot
+        )
     else:
-        recipient = user
+        # برای دیگری
+        recipient = await session.get(User, recipient_id)
+        if recipient is None:
+            await call.message.edit_text("❌ کاربر گیرنده یافت نشد.")
+            await call.answer()
+            return
 
-    await call.message.edit_text(MSG_WALLET_PROCESSING)
+        await _execute_split_for_other(
+            call.message, session, user, recipient, service, allocated_mb, bot
+        )
+
+    await call.answer()
+
+
+# ══════════════════════════════════════════════════════════════════
+#  Helpers: Execute split logic
+# ══════════════════════════════════════════════════════════════════
+
+async def _execute_split_for_self(
+    message_or_call,
+    session: AsyncSession,
+    user: User,
+    service: Service,
+    allocated_mb: int,
+    bot: Bot,
+) -> None:
+    """اجرای تقسیم برای خود کاربر."""
+    try:
+        await message_or_call.edit_text(MSG_WALLET_PROCESSING)
+    except AttributeError:
+        await message_or_call.answer(MSG_WALLET_PROCESSING)
+
+    try:
+        child = await wallet.do_split(
+            session,
+            parent=service,
+            allocated_mb=allocated_mb,
+            recipient=user,
+            title=f"کانفیگ {traffic(allocated_mb)}",
+            owner_id=user.id,
+        )
+    except wallet.SplitError as exc:
+        await message_or_call.edit_text(f"❌ {exc}")
+        return
+
+    await session.refresh(service)
+    remainder = service.traffic_mb
+
+    try:
+        await message_or_call.edit_text(
+            MSG_WALLET_SUCCESS_SELF.format(
+                allocated=traffic(allocated_mb),
+                remainder=traffic(remainder),
+            )
+        )
+    except AttributeError:
+        await message_or_call.answer(
+            MSG_WALLET_SUCCESS_SELF.format(
+                allocated=traffic(allocated_mb),
+                remainder=traffic(remainder),
+            )
+        )
+
+    await send_config(bot, user.id, child, session)
+    await activity.log_activity(
+        session, user.id, "wallet_split_self",
+        {"parent_id": service.id, "child_id": child.id, "allocated_mb": allocated_mb},
+    )
+
+
+async def _execute_split_for_other(
+    message_or_call,
+    session: AsyncSession,
+    sender: User,
+    recipient: User,
+    service: Service,
+    allocated_mb: int,
+    bot: Bot,
+) -> None:
+    """اجرای تقسیم برای کاربر دیگر."""
+    try:
+        await message_or_call.edit_text(MSG_WALLET_PROCESSING)
+    except AttributeError:
+        await message_or_call.answer(MSG_WALLET_PROCESSING)
 
     try:
         child = await wallet.do_split(
@@ -424,69 +356,63 @@ async def confirm_split(
             parent=service,
             allocated_mb=allocated_mb,
             recipient=recipient,
-            title=f"کانفیگ {_traffic(allocated_mb)}",
-            owner_id=user.id,
+            title=f"کانفیگ {traffic(allocated_mb)}",
+            owner_id=sender.id,
         )
     except wallet.SplitError as exc:
-        await call.message.edit_text(f"❌ {exc}")
-        await call.answer()
+        await message_or_call.edit_text(f"❌ {exc}")
         return
 
-    # به‌روزرسانی موجودی نمایش‌داده‌شده
     await session.refresh(service)
     remainder = service.traffic_mb
+    r_name = recipient.first_name or recipient.username or str(recipient.id)
 
-    if for_other:
-        r_name = recipient.first_name or str(recipient_id)
-        await call.message.edit_text(
+    try:
+        await message_or_call.edit_text(
             MSG_WALLET_SUCCESS_OTHER.format(
-                allocated=_traffic(allocated_mb),
+                allocated=traffic(allocated_mb),
                 recipient_name=r_name,
-                remainder=_traffic(remainder),
+                remainder=traffic(remainder),
             )
         )
-        # ارسال کانفیگ به گیرنده
-        try:
-            await bot.send_message(
-                recipient_id,
-                f"🎁 یک کانفیگ جدید ({_traffic(allocated_mb)}) "
-                f"از طرف یک کاربر برای شما ساخته شد!",
-            )
-            await send_config(bot, recipient_id, child, session)
-        except Exception:
-            logger.exception("failed delivering split config to user %s", recipient_id)
-    else:
-        await call.message.edit_text(
-            MSG_WALLET_SUCCESS_SELF.format(
-                allocated=_traffic(allocated_mb),
-                remainder=_traffic(remainder),
+    except AttributeError:
+        await message_or_call.answer(
+            MSG_WALLET_SUCCESS_OTHER.format(
+                allocated=traffic(allocated_mb),
+                recipient_name=r_name,
+                remainder=traffic(remainder),
             )
         )
-        await send_config(bot, user.id, child, session)
 
-    await call.answer()
+    # ارسال کانفیگ به گیرنده
+    try:
+        await bot.send_message(
+            recipient.id,
+            f"🎁 یک کانفیگ جدید ({traffic(allocated_mb)}) "
+            f"از طرف {sender.first_name or sender.username or 'یک کاربر'} برای شما ساخته شد!",
+        )
+        await send_config(bot, recipient.id, child, session)
+    except Exception:
+        logger.exception("failed delivering split config to user %s", recipient.id)
+
     await activity.log_activity(
-        session,
-        user.id,
-        "wallet_split",
+        session, sender.id, "wallet_split_other",
         {
             "parent_id": service.id,
             "child_id": child.id,
             "allocated_mb": allocated_mb,
-            "for_other": for_other,
-            "recipient_id": recipient_id if for_other else None,
+            "recipient_id": recipient.id,
         },
     )
 
 
 # ══════════════════════════════════════════════════════════════════
-#  لغو از هر جایی
+#  Cancel from anywhere
 # ══════════════════════════════════════════════════════════════════
 
 @router.callback_query(inline.WalletCB.filter(F.action == "cancel"))
-async def cancel_wallet(
-    call: CallbackQuery, state: FSMContext
-) -> None:
+async def cancel_wallet(call: CallbackQuery, state: FSMContext) -> None:
+    """لغو جریان."""
     await state.clear()
     await call.message.edit_text(MSG_CANCELLED)
     await call.answer()

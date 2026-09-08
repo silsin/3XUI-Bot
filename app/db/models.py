@@ -151,6 +151,13 @@ class Order(Base):
     package: Mapped[Package | None] = relationship()
 
 
+class ServiceSource(str, enum.Enum):
+    """منبع ایجاد سرویس."""
+    BOUGHT = "bought"                    # خریده شده
+    SPLIT_FROM_SELF = "split_from_self"  # جدا شده برای خودم
+    SPLIT_FROM_OTHER = "split_from_other" # دریافتی از کاربر دیگر
+
+
 class Service(Base):
     """یک کانفیگ فعال متعلق به کاربر."""
 
@@ -161,6 +168,9 @@ class Service(Base):
         ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     order_id: Mapped[int | None] = mapped_column(ForeignKey("orders.id"))
+    parent_service_id: Mapped[int | None] = mapped_column(
+        ForeignKey("services.id", ondelete="SET NULL"), index=True
+    )
 
     title: Mapped[str] = mapped_column(String(196), default="")
     inbound_id: Mapped[int] = mapped_column(Integer, default=1)
@@ -177,6 +187,9 @@ class Service(Base):
     status: Mapped[ServiceStatus] = mapped_column(
         Enum(ServiceStatus), default=ServiceStatus.ACTIVE, index=True
     )
+    source: Mapped[ServiceSource] = mapped_column(
+        Enum(ServiceSource), default=ServiceSource.BOUGHT
+    )
 
     # آخرین مصرف خوانده‌شده از پنل (بایت) — مجموع همه کلاینت‌ها
     used_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
@@ -186,6 +199,9 @@ class Service(Base):
     user: Mapped[User] = relationship(back_populates="services")
     clients: Mapped[list["ServiceClient"]] = relationship(
         back_populates="service", cascade="all, delete-orphan"
+    )
+    parent: Mapped["Service | None"] = relationship(
+        foreign_keys=[parent_service_id], remote_side=[id], viewonly=True
     )
 
 
@@ -240,32 +256,6 @@ class TrialClaim(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, index=True)
     service_id: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-
-
-class ServiceSplit(Base):
-    """ردیابی تقسیم (split) یک سرویس به زیرسرویس‌های کوچک‌تر.
-
-    وقتی کاربر از سرویس اصلی خود (parent) حجم جدا می‌کند، یک سرویس
-    فرزند (child) ساخته می‌شود و این رکورد رابطه آن‌ها را نگه می‌دارد.
-    """
-
-    __tablename__ = "service_splits"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    parent_service_id: Mapped[int] = mapped_column(
-        ForeignKey("services.id", ondelete="CASCADE"), index=True
-    )
-    child_service_id: Mapped[int] = mapped_column(
-        ForeignKey("services.id", ondelete="CASCADE"), index=True, unique=True
-    )
-    allocated_mb: Mapped[int] = mapped_column(Integer)          # حجم جدا شده (مگابایت)
-    recipient_user_id: Mapped[int | None] = mapped_column(      # گیرنده (خودش یا کاربر دیگر)
-        BigInteger, index=True
-    )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-
-    parent_service: Mapped["Service"] = relationship(foreign_keys=[parent_service_id])
-    child_service: Mapped["Service"] = relationship(foreign_keys=[child_service_id])
 
 
 class UserActivity(Base):
