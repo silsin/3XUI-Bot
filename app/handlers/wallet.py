@@ -16,11 +16,14 @@ from app.services import activity_service as activity
 from app.services import wallet_service as wallet
 from app.states import WalletFlow
 from app.texts import (
+    BTN_EARN,
     MSG_CANCELLED,
+    MSG_EARN_INTRO,
     MSG_WALLET_CONFIRM_OTHER,
     MSG_WALLET_CONFIRM_SELF,
     MSG_WALLET_ENTER_RECIPIENT,
     MSG_WALLET_ENTER_SIZE,
+    MSG_WALLET_NO_SERVICE,
     MSG_WALLET_PROCESSING,
     MSG_WALLET_RECIPIENT_NOT_FOUND,
     MSG_WALLET_SIZE_ERROR,
@@ -41,6 +44,29 @@ def _traffic(mb: int) -> str:
 
 def _expires(service: Service) -> str:
     return jalali_date(service.expires_at)
+
+
+# ══════════════════════════════════════════════════════════════════
+#  ورود: دکمه «کسب درآمد»
+# ══════════════════════════════════════════════════════════════════
+
+@router.message(F.text == BTN_EARN)
+async def earn_entry(
+    message: Message, session: AsyncSession, user: User, state: FSMContext
+) -> None:
+    await state.clear()
+    services = await wallet.get_splittable_services(session, user.id)
+    if not services:
+        await message.answer(
+            MSG_EARN_INTRO + "\n\n⚠️ در حال حاضر سرویس قابل تقسیمی ندارید.\n"
+            "پس از خرید اشتراک می‌توانید از این قابلیت استفاده کنید."
+        )
+        return
+    await message.answer(
+        MSG_EARN_INTRO,
+        reply_markup=inline.earn_open_kb(services),
+    )
+    await activity.log_activity(session, user.id, "earn_entry")
 
 
 # ══════════════════════════════════════════════════════════════════

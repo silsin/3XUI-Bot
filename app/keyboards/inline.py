@@ -493,3 +493,19 @@ def wallet_confirm_kb(
     )
     builder.adjust(1)
     return builder.as_markup()
+
+
+def earn_open_kb(services: list) -> InlineKeyboardMarkup:
+    """دکمه‌های ورود به کیف داده از صفحه کسب درآمد."""
+    from app.services.wallet_service import available_mb
+    from app.utils.formatting import traffic
+
+    builder = InlineKeyboardBuilder()
+    for svc in services:
+        avail = available_mb(svc)
+        builder.button(
+            text=f"💾 {svc.title}  ({traffic(avail)} آزاد)",
+            callback_data=WalletCB(action="select_service", service_id=svc.id),
+        )
+    builder.adjust(1)
+    return builder.as_markup()
