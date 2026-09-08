@@ -26,7 +26,6 @@ from app.texts import (
     BTN_SIZE_20GB,
     BTN_SPLIT_FOR_OTHER,
     BTN_SPLIT_FOR_SELF,
-    BTN_SPLIT_SERVICE,
 )
 from app.utils.formatting import days_left_text, fa_digits, money, toman_short, traffic
 
@@ -264,15 +263,10 @@ def service_detail_kb(service: Service) -> InlineKeyboardMarkup:
         style="success",
     )
     builder.button(
-        text=BTN_SPLIT_SERVICE,
-        callback_data=WalletCB(action="start_split", service_id=service.id),
-        style="success",
-    )
-    builder.button(
         text=BTN_BACK, callback_data=ServiceCB(action="list", service_id=0),
         style="primary",
     )
-    builder.adjust(*cfg_rows, *extra_rows, 1, 1, 1, 1)
+    builder.adjust(*cfg_rows, *extra_rows, 1, 1, 1)
     return builder.as_markup()
 
 
