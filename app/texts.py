@@ -15,11 +15,11 @@ BTN_MY_WALLET = "💾 کیف داده"
 BTN_EARN = "💰 کسب درآمد"
 
 MAIN_BUTTONS = [
+    [BTN_EARN],
     [BTN_TRIAL, BTN_BUY],
     [BTN_RENEW, BTN_MY_SERVICES],
     [BTN_POINTS, BTN_GUIDE],
     [BTN_INVITE, BTN_SUPPORT],
-    [BTN_EARN],
 ]
 
 # ---------- کلیدهای تنظیمات ----------
