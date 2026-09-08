@@ -16,17 +16,13 @@ from app.services import activity_service as activity
 from app.services import wallet_service as wallet
 from app.states import WalletFlow
 from app.texts import (
-    BTN_MY_WALLET,
     MSG_CANCELLED,
     MSG_WALLET_CONFIRM_OTHER,
     MSG_WALLET_CONFIRM_SELF,
     MSG_WALLET_ENTER_RECIPIENT,
     MSG_WALLET_ENTER_SIZE,
-    MSG_WALLET_INTRO,
-    MSG_WALLET_NO_SERVICE,
     MSG_WALLET_PROCESSING,
     MSG_WALLET_RECIPIENT_NOT_FOUND,
-    MSG_WALLET_SELECT_TYPE,
     MSG_WALLET_SIZE_ERROR,
     MSG_WALLET_SUCCESS_OTHER,
     MSG_WALLET_SUCCESS_SELF,
@@ -45,23 +41,6 @@ def _traffic(mb: int) -> str:
 
 def _expires(service: Service) -> str:
     return jalali_date(service.expires_at)
-
-
-# ══════════════════════════════════════════════════════════════════
-#  ورود: دکمه «کیف داده»
-# ══════════════════════════════════════════════════════════════════
-
-@router.message(F.text == BTN_MY_WALLET)
-async def wallet_entry(
-    message: Message, session: AsyncSession, user: User, state: FSMContext
-) -> None:
-    await state.clear()
-    services = await wallet.get_splittable_services(session, user.id)
-    if not services:
-        await message.answer(MSG_WALLET_NO_SERVICE)
-        return
-    await message.answer(MSG_WALLET_INTRO, reply_markup=inline.wallet_services_kb(services))
-    await activity.log_activity(session, user.id, "wallet_entry")
 
 
 # ══════════════════════════════════════════════════════════════════

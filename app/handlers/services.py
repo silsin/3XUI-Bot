@@ -13,7 +13,8 @@ from app.db.models import Service, ServiceClient, ServiceStatus, User
 from app.keyboards import inline
 from app.services import activity_service as activity
 from app.services import provisioning
-from app.texts import BTN_MY_SERVICES, MSG_NO_SERVICES
+from app.services import wallet_service as wallet
+from app.texts import BTN_MY_SERVICES, MSG_NO_SERVICES, MSG_WALLET_NO_SERVICE, MSG_WALLET_SELECT_TYPE
 from app.utils.formatting import (
     days_left,
     days_left_text,
@@ -262,3 +263,35 @@ async def refresh_service(
         )
     except Exception:  # noqa: BLE001 — پیام تغییری نکرده
         pass
+
+
+@router.callback_query(inline.ServiceCB.filter(F.action == "wallet"))
+async def open_wallet(
+    call: CallbackQuery,
+    callback_data: inline.ServiceCB,
+    session: AsyncSession,
+    user: User,
+) -> None:
+    """ورود به کیف داده از صفحه جزئیات سرویس."""
+    service = await session.get(Service, callback_data.service_id)
+    if service is None or service.user_id != user.id:
+        await call.answer("سرویس یافت نشد.", show_alert=True)
+        return
+
+    if not wallet._is_active_splittable(service):
+        await call.answer(MSG_WALLET_NO_SERVICE, show_alert=True)
+        return
+
+    avail = wallet.available_mb(service)
+    from app.utils.formatting import jalali_date
+    text = MSG_WALLET_SELECT_TYPE.format(
+        title=service.title,
+        available=traffic(avail),
+        expires=jalali_date(service.expires_at),
+    )
+    await call.message.edit_text(
+        text,
+        reply_markup=inline.wallet_type_kb(service.id),
+    )
+    await call.answer()
+    await activity.log_activity(session, user.id, "wallet_entry", {"service_id": service.id})

@@ -18,7 +18,6 @@ MAIN_BUTTONS = [
     [BTN_RENEW, BTN_MY_SERVICES],
     [BTN_POINTS, BTN_GUIDE],
     [BTN_INVITE, BTN_SUPPORT],
-    [BTN_MY_WALLET],
 ]
 
 # ---------- کلیدهای تنظیمات ----------

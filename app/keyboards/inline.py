@@ -255,10 +255,15 @@ def service_detail_kb(service: Service) -> InlineKeyboardMarkup:
         style="success",
     )
     builder.button(
+        text="💾 کیف داده",
+        callback_data=ServiceCB(action="wallet", service_id=service.id),
+        style="success",
+    )
+    builder.button(
         text=BTN_BACK, callback_data=ServiceCB(action="list", service_id=0),
         style="primary",
     )
-    builder.adjust(*cfg_rows, *extra_rows, 1, 1, 1)
+    builder.adjust(*cfg_rows, *extra_rows, 1, 1, 1, 1)
     return builder.as_markup()
 
 
