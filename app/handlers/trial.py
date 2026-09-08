@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 
 from aiogram import F, Router
-from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,10 +26,7 @@ router = Router(name="trial")
 
 
 @router.message(F.text == BTN_TRIAL)
-async def free_trial(
-    message: Message, session: AsyncSession, user: User, state: FSMContext
-) -> None:
-    await state.clear()  # Clear any existing state
+async def free_trial(message: Message, session: AsyncSession, user: User) -> None:
     if not await cfg.get_bool(session, S_TRIAL_ENABLED, True):
         await message.answer(MSG_TRIAL_DISABLED)
         return

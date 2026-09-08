@@ -12,18 +12,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.db.models import (
     Duration,
-    Offer,
     Order,
     OrderKind,
     OrderStatus,
     Package,
     Service,
+    ServiceStatus,
     User,
 )
 from app.keyboards import inline
 from app.keyboards import reply
 from app.services import activity_service as activity
-from app.services import offers_service as offers
 from app.services import settings_service as cfg
 from app.states import BuyFlow
 from app.texts import (
@@ -35,10 +34,6 @@ from app.texts import (
     MSG_NO_DURATION,
     MSG_NO_PACKAGE,
     MSG_NO_SERVICES,
-    MSG_PROMO_APPLIED,
-    MSG_PROMO_ASK,
-    MSG_PROMO_INVALID,
-    MSG_PROMO_REMOVED,
     MSG_RECEIPT_ASK,
     MSG_RECEIPT_INVALID,
     MSG_RECEIPT_SENT,
@@ -79,44 +74,8 @@ async def _active_packages(session: AsyncSession, duration_id: int) -> list[Pack
     )
 
 
-async def _build_checkout_text(
-    session: AsyncSession,
-    package: Package,
-    duration: Duration,
-    offer: Offer | None,
-    service_id: int,
-) -> tuple[str, int, int, int]:
-    """
-    متن صفحه checkout را با تخفیف (اگر وجود داشته باشد) می‌سازد.
-    برمی‌گرداند: (text, final_price, discount_amount, bonus_traffic_mb)
-    """
-    discount_amount = 0
-    bonus_mb = 0
-    if offer:
-        _, discount_amount, bonus_mb = offers.calc_discount(offer, package.price)
+# ---------- ورود به جریان خرید ----------
 
-    text = inline.package_summary(
-        package,
-        duration,
-        discount_amount=discount_amount,
-        bonus_traffic_mb=bonus_mb,
-        offer_title=offer.title if offer else "",
-    )
-    if service_id:
-        text = "♻️ <b>تمدید سرویس</b>\n\n" + text
-
-    # بنر تخفیف‌های خودکار فعال (فقط وقتی تخفیف اعمال نشده)
-    if not offer:
-        active = await offers.find_auto_offers(session, package, 0)
-        if active:
-            banners = "\n".join(f"  • {offers.offer_summary_text(o)}" for o in active[:3])
-            text += f"\n\n🎉 <b>پیشنهادهای ویژه فعال:</b>\n{banners}"
-
-    final_price = max(0, package.price - discount_amount)
-    return text, final_price, discount_amount, bonus_mb
-
-
-# ─────────────────────── ورود به جریان خرید ─────────────────────────
 
 @router.message(F.text == BTN_BUY)
 async def start_buy(message: Message, session: AsyncSession, state: FSMContext) -> None:
@@ -125,15 +84,15 @@ async def start_buy(message: Message, session: AsyncSession, state: FSMContext) 
     if not durations:
         await message.answer(MSG_NO_DURATION)
         return
-    await message.answer(MSG_CHOOSE_DURATION, reply_markup=inline.durations_kb(durations))
+    await message.answer(
+        MSG_CHOOSE_DURATION, reply_markup=inline.durations_kb(durations)
+    )
+    # لاگ فعالیت
     await activity.log_activity(session, message.from_user.id, activity.Actions.VIEW_PLANS)
 
 
 @router.message(F.text == BTN_RENEW)
-async def start_renew(
-    message: Message, session: AsyncSession, user: User, state: FSMContext
-) -> None:
-    await state.clear()  # Clear any existing state
+async def start_renew(message: Message, session: AsyncSession, user: User) -> None:
     services = list(
         (
             await session.execute(
@@ -150,10 +109,12 @@ async def start_renew(
         "کدام سرویس را می‌خواهید تمدید کنید؟",
         reply_markup=inline.services_kb(services),
     )
+    # لاگ فعالیت
     await activity.log_activity(session, user.id, activity.Actions.INITIATE_BUY, {"type": "renew"})
 
 
-# ───────────────────────── ناوبری اینلاین ────────────────────────────
+# ---------- ناوبری اینلاین ----------
+
 
 @router.callback_query(inline.BuyCB.filter(F.action == "durations"))
 async def show_durations(
@@ -169,6 +130,7 @@ async def show_durations(
         reply_markup=inline.durations_kb(durations, callback_data.service_id),
     )
     await call.answer()
+    # لاگ فعالیت
     await activity.log_activity(session, call.from_user.id, activity.Actions.VIEW_DURATIONS)
 
 
@@ -188,18 +150,16 @@ async def show_packages(
         ),
     )
     await call.answer()
+    # لاگ فعالیت
     await activity.log_activity(
         session, call.from_user.id, activity.Actions.VIEW_PACKAGES,
-        {"duration_id": callback_data.duration_id, "duration_title": duration.title},
+        {"duration_id": callback_data.duration_id, "duration_title": duration.title}
     )
 
 
 @router.callback_query(inline.BuyCB.filter(F.action == "checkout"))
 async def show_checkout(
-    call: CallbackQuery,
-    callback_data: inline.BuyCB,
-    session: AsyncSession,
-    user: User,
+    call: CallbackQuery, callback_data: inline.BuyCB, session: AsyncSession
 ) -> None:
     package = await session.get(Package, callback_data.package_id)
     duration = await session.get(Duration, callback_data.duration_id)
@@ -207,34 +167,15 @@ async def show_checkout(
         await call.answer(MSG_NO_PACKAGE, show_alert=True)
         return
 
-    # اگر offer_id از قبل حمل شده (مثلاً بعد از اعمال کد)
-    offer: Offer | None = None
-    if callback_data.offer_id:
-        offer = await session.get(Offer, callback_data.offer_id)
-        # اعتبارسنجی مجدد سریع
-        if offer:
-            _, err = await offers.validate_code(
-                session, offer.code or "", package, user.id
-            ) if offer.code else (offer, None)
-            if err:
-                offer = None  # تخفیف دیگر معتبر نیست
-
-    # بررسی تخفیف‌های خودکار اگر هنوز تخفیفی اعمال نشده
-    if not offer:
-        auto = await offers.find_auto_offers(session, package, user.id)
-        if auto:
-            offer = auto[0]  # بهترین تخفیف خودکار
-
-    text, _, _, _ = await _build_checkout_text(
-        session, package, duration, offer, callback_data.service_id
-    )
+    summary = inline.package_summary(package, duration)
+    if callback_data.service_id:
+        summary = "♻️ <b>تمدید سرویس</b>\n\n" + summary
     await call.message.edit_text(
-        text,
+        summary,
         reply_markup=inline.checkout_kb(
             callback_data.duration_id,
             callback_data.package_id,
             callback_data.service_id,
-            offer_id=offer.id if offer else 0,
         ),
     )
     await call.answer()
@@ -247,104 +188,8 @@ async def cancel_buy(call: CallbackQuery, state: FSMContext) -> None:
     await call.answer()
 
 
-# ───────────────────────── کد تخفیف ─────────────────────────────────
+# ---------- ساخت سفارش و درخواست رسید ----------
 
-@router.callback_query(inline.BuyCB.filter(F.action == "promo"))
-async def ask_promo_code(
-    call: CallbackQuery, callback_data: inline.BuyCB, state: FSMContext
-) -> None:
-    """کاربر روی «دارم کد تخفیف» زده — منتظر ورود کد می‌مانیم."""
-    await state.set_state(BuyFlow.waiting_promo_code)
-    await state.update_data(
-        duration_id=callback_data.duration_id,
-        package_id=callback_data.package_id,
-        service_id=callback_data.service_id,
-    )
-    await call.message.answer(MSG_PROMO_ASK)
-    await call.answer()
-
-
-@router.message(BuyFlow.waiting_promo_code)
-async def receive_promo_code(
-    message: Message,
-    session: AsyncSession,
-    user: User,
-    state: FSMContext,
-) -> None:
-    """دریافت کد تخفیف از کاربر."""
-    data = await state.get_data()
-    await state.clear()
-
-    package_id = data.get("package_id", 0)
-    duration_id = data.get("duration_id", 0)
-    service_id = data.get("service_id", 0)
-
-    package = await session.get(Package, package_id)
-    duration = await session.get(Duration, duration_id)
-    if package is None or duration is None:
-        await message.answer(MSG_NO_PACKAGE)
-        return
-
-    code = message.text.strip()
-    offer, err = await offers.validate_code(session, code, package, user.id)
-    if err or offer is None:
-        await message.answer(MSG_PROMO_INVALID.format(error=err or "کد نامعتبر"))
-        # برگشت به checkout بدون تخفیف
-        text, _, _, _ = await _build_checkout_text(session, package, duration, None, service_id)
-        await message.answer(
-            text,
-            reply_markup=inline.checkout_kb(duration_id, package_id, service_id, offer_id=0),
-        )
-        return
-
-    # کد معتبر — نمایش checkout با تخفیف
-    _, discount, bonus_mb = offers.calc_discount(offer, package.price)
-    summary = offers.offer_summary_text(offer)
-
-    text, _, _, _ = await _build_checkout_text(session, package, duration, offer, service_id)
-    await message.answer(
-        MSG_PROMO_APPLIED.format(code=code.upper(), summary=summary),
-    )
-    await message.answer(
-        text,
-        reply_markup=inline.checkout_kb(duration_id, package_id, service_id, offer_id=offer.id),
-    )
-    await activity.log_activity(
-        session, user.id, "promo_code",
-        {"code": code.upper(), "offer_id": offer.id}
-    )
-
-
-@router.callback_query(inline.BuyCB.filter(F.action == "remove_promo"))
-async def remove_promo(
-    call: CallbackQuery,
-    callback_data: inline.BuyCB,
-    session: AsyncSession,
-    user: User,
-) -> None:
-    """حذف تخفیف اعمال‌شده."""
-    package = await session.get(Package, callback_data.package_id)
-    duration = await session.get(Duration, callback_data.duration_id)
-    if package is None or duration is None:
-        await call.answer(MSG_NO_PACKAGE, show_alert=True)
-        return
-
-    text, _, _, _ = await _build_checkout_text(
-        session, package, duration, None, callback_data.service_id
-    )
-    await call.message.edit_text(
-        text,
-        reply_markup=inline.checkout_kb(
-            callback_data.duration_id,
-            callback_data.package_id,
-            callback_data.service_id,
-            offer_id=0,
-        ),
-    )
-    await call.answer(MSG_PROMO_REMOVED)
-
-
-# ─────────────────── ساخت سفارش و درخواست رسید ──────────────────────
 
 @router.callback_query(inline.BuyCB.filter(F.action == "pay"))
 async def create_order(
@@ -367,76 +212,31 @@ async def create_order(
             await call.answer("سرویس یافت نشد.", show_alert=True)
             return
 
-    # ── محاسبه تخفیف ──
-    offer: Offer | None = None
-    discount_amount = 0
-    bonus_traffic_mb = 0
-
-    if callback_data.offer_id:
-        offer = await session.get(Offer, callback_data.offer_id)
-        if offer:
-            # اعتبارسنجی نهایی قبل از ثبت
-            if offer.code:
-                _, err = await offers.validate_code(session, offer.code, package, user.id)
-                if err:
-                    offer = None
-            if offer:
-                _, discount_amount, bonus_traffic_mb = offers.calc_discount(offer, package.price)
-
-    # اگر تخفیف کدی نداشت، تخفیف خودکار را چک کن
-    if not offer:
-        auto = await offers.find_auto_offers(session, package, user.id)
-        if auto:
-            offer = auto[0]
-            _, discount_amount, bonus_traffic_mb = offers.calc_discount(offer, package.price)
-
-    final_amount = max(0, package.price - discount_amount)
-    final_traffic = package.traffic_mb + bonus_traffic_mb
-
     order = Order(
         user_id=user.id,
         package_id=package.id,
         renew_service_id=renew_service_id,
         kind=OrderKind.RENEW if renew_service_id else OrderKind.NEW,
         status=OrderStatus.AWAITING_RECEIPT,
-        amount=final_amount,
+        amount=package.price,
         days=duration.days,
-        traffic_mb=final_traffic,
+        traffic_mb=package.traffic_mb,
         title=f"{package.title} — {duration.title}",
-        offer_id=offer.id if offer else None,
-        discount_amount=discount_amount,
-        bonus_traffic_mb=bonus_traffic_mb,
     )
     session.add(order)
-    await session.flush()  # برای دریافت order.id
-
-    # ثبت استفاده از تخفیف
-    if offer:
-        await offers.apply_offer(session, offer, package, user.id, order.id)
-    else:
-        await session.commit()
-
+    await session.commit()
     await session.refresh(order)
 
     card_number = await cfg.get(session, S_CARD_NUMBER)
     instruction = render(
         await cfg.get(session, S_BUY_INSTRUCTION),
-        amount=money(final_amount),
+        amount=money(package.price),
         card_number=card_number,
         card_holder=await cfg.get(session, S_CARD_HOLDER),
     )
-    # اگر تخفیف داشت یادداشت اضافه کن
-    if discount_amount > 0:
-        instruction += (
-            f"\n\n🏷 <b>تخفیف اعمال‌شده:</b> {offer.title}\n"
-            f"💸 مبلغ تخفیف: <b>{money(discount_amount)} تومان</b>"
-        )
-    if bonus_traffic_mb > 0:
-        instruction += f"\n🎁 حجم اضافه: <b>{traffic(bonus_traffic_mb)}</b>"
-
     await call.message.edit_text(
         instruction,
-        reply_markup=inline.payment_kb(order.id, card_number, final_amount),
+        reply_markup=inline.payment_kb(order.id, card_number, package.price),
         disable_web_page_preview=True,
     )
     await call.answer()
@@ -526,11 +326,6 @@ async def _notify_admin(
         f"⏱ {order.days} روز | 📊 {traffic(order.traffic_mb)}\n"
         f"💰 مبلغ: <b>{money(order.amount)} تومان</b>"
     )
-    if order.discount_amount:
-        caption += f"\n🏷 تخفیف: {money(order.discount_amount)} تومان"
-    if order.bonus_traffic_mb:
-        caption += f"\n🎁 بونوس: {traffic(order.bonus_traffic_mb)}"
-
     markup = inline.receipt_review_kb(order.id)
     sent: list[list[int]] = []
     for target in targets:
@@ -544,7 +339,7 @@ async def _notify_admin(
                     target, order.receipt_file_id, caption=caption, reply_markup=markup
                 )
             sent.append([msg.chat.id, msg.message_id])
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001 — یک ادمین ممکن است ربات را استارت نکرده باشد
             logger.exception("failed to notify admin %s for order %s", target, order.id)
 
     order.notify_msgs = json.dumps(sent)

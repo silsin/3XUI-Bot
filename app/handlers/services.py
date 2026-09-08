@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 
 from aiogram import F, Router
-from aiogram.fsm.context import FSMContext
 from aiogram.types import BufferedInputFile, CallbackQuery, Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -112,10 +111,7 @@ def _split_active(services: list[Service]) -> tuple[list[Service], int]:
 
 
 @router.message(F.text == BTN_MY_SERVICES)
-async def my_services(
-    message: Message, session: AsyncSession, user: User, state: FSMContext
-) -> None:
-    await state.clear()  # Clear any existing state
+async def my_services(message: Message, session: AsyncSession, user: User) -> None:
     services = await _user_services(session, user.id)
     if not services:
         await message.answer(MSG_NO_SERVICES)
