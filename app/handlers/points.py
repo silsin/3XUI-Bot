@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,7 +33,10 @@ router = Router(name="points")
 
 
 @router.message(F.text == BTN_POINTS)
-async def my_points(message: Message, session: AsyncSession, user: User) -> None:
+async def my_points(
+    message: Message, session: AsyncSession, user: User, state: FSMContext
+) -> None:
+    await state.clear()  # Clear any existing state
     per_day = await cfg.get_int(session, S_POINTS_PER_DAY, 10)
     days = await pts.points_to_days(session, user.points)
     text = render(
@@ -96,7 +100,10 @@ async def redeem_points(
 
 
 @router.message(F.text == BTN_INVITE)
-async def invite(message: Message, session: AsyncSession, user: User) -> None:
+async def invite(
+    message: Message, session: AsyncSession, user: User, state: FSMContext
+) -> None:
+    await state.clear()  # Clear any existing state
     me = await message.bot.get_me()
     link = f"https://t.me/{me.username}?start=ref_{user.id}"
     points = await cfg.get_int(session, S_REFERRAL_POINTS, 10)

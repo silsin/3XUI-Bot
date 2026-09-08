@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,7 +13,8 @@ router = Router(name="misc")
 
 
 @router.message(F.text == BTN_GUIDE)
-async def guide(message: Message, session: AsyncSession) -> None:
+async def guide(message: Message, session: AsyncSession, state: FSMContext) -> None:
+    await state.clear()  # Clear any existing state
     await message.answer(
         await cfg.get(session, S_GUIDE_TEXT), disable_web_page_preview=True
     )
@@ -21,7 +23,8 @@ async def guide(message: Message, session: AsyncSession) -> None:
 
 
 @router.message(F.text == BTN_SUPPORT)
-async def support(message: Message, session: AsyncSession) -> None:
+async def support(message: Message, session: AsyncSession, state: FSMContext) -> None:
+    await state.clear()  # Clear any existing state
     await message.answer(
         await cfg.get(session, S_SUPPORT_TEXT), disable_web_page_preview=True
     )

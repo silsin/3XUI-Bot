@@ -130,7 +130,10 @@ async def start_buy(message: Message, session: AsyncSession, state: FSMContext) 
 
 
 @router.message(F.text == BTN_RENEW)
-async def start_renew(message: Message, session: AsyncSession, user: User) -> None:
+async def start_renew(
+    message: Message, session: AsyncSession, user: User, state: FSMContext
+) -> None:
+    await state.clear()  # Clear any existing state
     services = list(
         (
             await session.execute(
