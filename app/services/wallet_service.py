@@ -1,9 +1,10 @@
-"""منطق تقسیم سرویس (split) و انتقال به کاربر دیگر — ساده‌شده.
+"""منطق تقسیم سرویس (split) و انتقال به کاربر دیگر.
 
 این ماژول لایه میانی بین هندلر و provisioning است:
-- اعتبارسنجی سرویس قابل تقسیم
-- فراخوانی provisioning.split_service با اندازه‌های پیش‌تعریف‌شده
-- جستجوی کاربر بر اساس username (@username lookup)
+- اعتبارسنجی ورودی کاربر
+- تبدیل واحد (GB/MB) به مگابایت خالص
+- فراخوانی provisioning.split_service
+- بازیابی لیست سرویس‌های قابل تقسیم
 """
 
 from __future__ import annotations
@@ -15,24 +16,17 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Service, ServiceStatus, User
+from app.db.models import Service, ServiceSplit, ServiceStatus, User
 from app.services.provisioning import split_service
 from app.services.vpn.base import VpnError
 
 logger = logging.getLogger(__name__)
 
+MB = 1024 * 1024
+GB = 1024 * MB
+
 # حداقل حجمی که می‌توان جدا کرد
 MIN_SPLIT_MB = 100   # ۱۰۰ مگابایت
-
-# اندازه‌های استاندارد پیش‌فرض
-STANDARD_SIZES = {
-    "1gb": 1024,
-    "2gb": 2048,
-    "5gb": 5120,
-    "10gb": 10240,
-    "20gb": 20480,
-    "50gb": 51200,
-}
 
 
 @dataclass(slots=True)
@@ -42,6 +36,50 @@ class SplitError(Exception):
 
     def __str__(self) -> str:
         return self.message
+
+
+# ─────────────────────── کمک‌ها ────────────────────────────────────
+
+def parse_size_input(text: str) -> tuple[int, str | None]:
+    """ورودی کاربر را به مگابایت تبدیل می‌کند.
+
+    فرمت‌های قابل قبول:
+      - «500» یا «500mb» یا «500 mb»  → 500 MB
+      - «10» یا «10gb» یا «10 gb»     → 10 240 MB
+      - «1.5gb» یا «1.5 gb»           → 1 536 MB
+      - «500mib»                       → 500 MB (معادل MB در این بات)
+
+    برمی‌گرداند: (mb_int, error_str_or_None)
+    اگر خطا باشد mb_int=0 و error_str پر است.
+    """
+    raw = text.strip().lower().replace("،", ".").replace(",", ".")
+    # جدا کردن عدد از واحد
+    unit = ""
+    num_str = raw
+    for suffix in ("gib", "mib", "gb", "mb", "g", "m"):
+        if raw.endswith(suffix):
+            unit = suffix
+            num_str = raw[: -len(suffix)].strip()
+            break
+
+    try:
+        value = float(num_str)
+    except ValueError:
+        return 0, "عدد وارد‌شده معتبر نیست."
+
+    if value <= 0:
+        return 0, "مقدار باید بزرگ‌تر از صفر باشد."
+
+    if unit in ("gb", "g", "gib"):
+        mb = int(value * 1024)
+    else:
+        # پیش‌فرض: MB
+        mb = int(value)
+
+    if mb < MIN_SPLIT_MB:
+        return 0, f"حداقل حجم قابل تقسیم {MIN_SPLIT_MB} مگابایت است."
+
+    return mb, None
 
 
 def available_mb(service: Service) -> int:
@@ -75,15 +113,10 @@ def _is_active_splittable(service: Service) -> bool:
 
 # ─────────────────────── توابع اصلی ────────────────────────────────
 
-# ─────────────────────── توابع اصلی ────────────────────────────
-
 async def get_splittable_services(
     session: AsyncSession, user_id: int
 ) -> list[Service]:
-    """لیست سرویس‌های فعال کاربر که قابل تقسیم هستند.
-
-    شرایط: فعال، دارای quota مشخص (نه نامحدود)، حداقل MIN_SPLIT_MB آزاد.
-    """
+    """لیست سرویس‌های فعال کاربر که قابل تقسیم هستند."""
     rows = list(
         (
             await session.execute(
@@ -99,34 +132,6 @@ async def get_splittable_services(
     return [s for s in rows if _is_active_splittable(s)]
 
 
-def _is_active_splittable(service: Service) -> bool:
-    """آیا این سرویس می‌تواند تقسیم شود؟"""
-    if service.status is not ServiceStatus.ACTIVE:
-        return False
-    if service.traffic_mb == 0:
-        return False   # نامحدود
-    if service.is_trial:
-        return False
-    if available_mb(service) < MIN_SPLIT_MB:
-        return False
-    # منقضی نشده باشد
-    if service.expires_at is not None:
-        exp = service.expires_at
-        if exp.tzinfo is None:
-            exp = exp.replace(tzinfo=timezone.utc)
-        if exp <= datetime.now(timezone.utc):
-            return False
-    return True
-
-
-def available_mb(service: Service) -> int:
-    """حجم موجود برای تقسیم (بدون احتساب مصرف)."""
-    if service.traffic_mb == 0:
-        return 0   # نامحدود
-    used_mb = service.used_bytes // (1024 * 1024)
-    return max(0, service.traffic_mb - used_mb)
-
-
 async def validate_split(
     session: AsyncSession,
     parent: Service,
@@ -137,6 +142,7 @@ async def validate_split(
 
     برمی‌گرداند: پیام خطا (فارسی) یا None اگر معتبر باشد.
     """
+    # سرویس باید به همین کاربر تعلق داشته باشد
     if parent.user_id != owner_id:
         return "این سرویس به شما تعلق ندارد."
 
@@ -202,24 +208,19 @@ async def do_split(
     return child
 
 
-async def get_user_by_username(
-    session: AsyncSession, username: str
-) -> User | None:
-    """جستجوی کاربر بر اساس username (بدون @ یا با @).
-
-    مثال: «john» یا «@john» → User با username='john'
-    """
-    raw = username.strip().lstrip("@").lower()
-    if not raw or len(raw) < 3:
-        return None
-
-    return (
-        await session.execute(
-            select(User).where(
-                User.username == raw
+async def get_split_history(
+    session: AsyncSession, service_id: int
+) -> list[ServiceSplit]:
+    """تاریخچه تقسیم‌های انجام‌شده از یک سرویس."""
+    return list(
+        (
+            await session.execute(
+                select(ServiceSplit)
+                .where(ServiceSplit.parent_service_id == service_id)
+                .order_by(ServiceSplit.created_at.desc())
             )
-        )
-    ).scalar_one_or_none()
+        ).scalars().all()
+    )
 
 
 async def get_user_by_telegram_id(

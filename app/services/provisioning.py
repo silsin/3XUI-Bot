@@ -14,7 +14,7 @@ from app.db.models import (
     Order,
     Service,
     ServiceClient,
-    ServiceSource,
+    ServiceSplit,
     ServiceStatus,
     TrialClaim,
     User,
@@ -443,17 +443,20 @@ async def split_service(
             )
         )
 
-    # ثبت رابطه split — تنظیم parent_service_id و source روی child
-    child.parent_service_id = parent.id
-    child.source = (
-        ServiceSource.SPLIT_FROM_SELF if recipient.id == parent.user_id
-        else ServiceSource.SPLIT_FROM_OTHER
+    # ثبت رابطه split
+    session.add(
+        ServiceSplit(
+            parent_service_id=parent.id,
+            child_service_id=child.id,
+            allocated_mb=allocated_mb,
+            recipient_user_id=recipient.id,
+        )
     )
 
     await session.commit()
     await session.refresh(child)
     logger.info(
-        "split: parent=%s -%dMB → child=%s for user=%s (source=%s)",
-        parent.id, allocated_mb, child.id, recipient.id, child.source,
+        "split: parent=%s -%dMB → child=%s for user=%s",
+        parent.id, allocated_mb, child.id, recipient.id,
     )
     return child
