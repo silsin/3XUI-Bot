@@ -380,12 +380,14 @@ def wallet_services_kb(services: list) -> InlineKeyboardMarkup:
         builder.button(
             text=f"🔹 {svc.title}  ({traffic(avail)} آزاد)",
             callback_data=WalletCB(action="select_service", service_id=svc.id),
+            style="primary",
         )
     builder.adjust(1)
     builder.row(
         InlineKeyboardButton(
             text=BTN_CANCEL,
             callback_data=WalletCB(action="cancel").pack(),
+            style="danger",
         )
     )
     return builder.as_markup()
@@ -397,14 +399,17 @@ def wallet_type_kb(service_id: int) -> InlineKeyboardMarkup:
     builder.button(
         text=BTN_SPLIT_FOR_SELF,
         callback_data=WalletCB(action="set_type", service_id=service_id, for_other=0),
+        style="primary",
     )
     builder.button(
         text=BTN_SPLIT_FOR_OTHER,
         callback_data=WalletCB(action="set_type", service_id=service_id, for_other=1),
+        style="primary",
     )
     builder.button(
         text=BTN_BACK,
         callback_data=WalletCB(action="select_service", service_id=0),
+        style="primary",
     )
     builder.adjust(1)
     return builder.as_markup()
@@ -441,6 +446,7 @@ def wallet_size_kb(
                     for_other=for_other,
                     allocated_mb=mb,
                 ),
+                style="primary",
             )
             shown += 1
 
@@ -451,6 +457,7 @@ def wallet_size_kb(
             service_id=service_id,
             for_other=for_other,
         ),
+        style="primary",
     )
     # چیدمان: ۲ ستون برای دکمه‌های سریع، مقدار دلخواه تک‌ردیف
     if shown:
@@ -464,6 +471,7 @@ def wallet_size_kb(
             callback_data=WalletCB(
                 action="select_service", service_id=service_id
             ).pack(),
+            style="primary",
         )
     )
     return builder.as_markup()
@@ -486,10 +494,12 @@ def wallet_confirm_kb(
             allocated_mb=allocated_mb,
             recipient_id=recipient_id,
         ),
+        style="success",
     )
     builder.button(
         text=BTN_CANCEL,
         callback_data=WalletCB(action="cancel"),
+        style="danger",
     )
     builder.adjust(1)
     return builder.as_markup()
@@ -506,6 +516,7 @@ def earn_open_kb(services: list) -> InlineKeyboardMarkup:
         builder.button(
             text=f"💾 {svc.title}  ({traffic(avail)} آزاد)",
             callback_data=WalletCB(action="select_service", service_id=svc.id),
+            style="primary",
         )
     builder.adjust(1)
     return builder.as_markup()
