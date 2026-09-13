@@ -26,9 +26,6 @@ class AdminFlow(StatesGroup):
     offer_max_uses = State()
     offer_per_user = State()
     offer_valid_days = State()
-    # مدیریت کانال
-    editing_channel_setting = State()
-    channel_verify_user = State()
 
 
 class WalletFlow(StatesGroup):

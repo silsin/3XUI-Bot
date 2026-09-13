@@ -43,13 +43,6 @@ S_CONFIG_CAPTION = "config_caption"
 # فهرست inboundهای چند-پروتکل (با کاما). خالی = استفاده از inbound پکیج/تنظیمات
 S_MULTI_INBOUNDS = "multi_inbounds"
 
-# تنظیمات کانال اجباری
-S_CHANNEL_ENABLED = "channel_enabled"  # فعال بودن سیستم کانال اجباری
-S_CHANNEL_USERNAME = "channel_username"  # آیدی کانال (@channel)
-S_CHANNEL_ID = "channel_id"  # شناسه عددی کانال
-S_CHANNEL_INVITE_LINK = "channel_invite_link"  # لینک دعوت کانال
-S_CHANNEL_VERIFICATION_TEXT = "channel_verification_text"  # متن درخواست عضویت
-
 DEFAULT_SETTINGS: dict[str, str] = {
     S_WELCOME_TEXT: (
         "🌟 <b>به ربات فروش اشتراک خوش آمدید</b>\n\n"
@@ -123,17 +116,6 @@ DEFAULT_SETTINGS: dict[str, str] = {
         "<code>{link}</code>\n\n"
         "برای راهنمای اتصال از «آموزش استفاده» استفاده کنید."
     ),
-    # تنظیمات پیش‌فرض کانال اجباری
-    S_CHANNEL_ENABLED: "0",  # پیش‌فرض غیرفعال
-    S_CHANNEL_USERNAME: "",  # آیدی کانال خالی
-    S_CHANNEL_ID: "",  # شناسه کانال خالی
-    S_CHANNEL_INVITE_LINK: "",  # لینک دعوت خالی
-    S_CHANNEL_VERIFICATION_TEXT: (
-        "👋 <b>برای استفاده از ربات، ابتدا باید در کانال ما عضو شوید</b>\n\n"
-        "لطفاً در کانال زیر عضو شوید و سپس روی دکمه «عضویت در کانال» بزنید:\n\n"
-        "🔗 {channel_link}\n\n"
-        "پس از عضویت، روی دکمه زیر بزنید تا بررسی شود 👇"
-    ),
 }
 
 # ---------- پیام‌های ثابت ----------
@@ -144,19 +126,6 @@ MSG_PANEL_ERROR = (
     "❌ در ساخت کانفیگ خطایی رخ داد. مبلغ شما محفوظ است و "
     "پشتیبانی در اسرع وقت پیگیری می‌کند."
 )
-
-# پیام‌های سیستم کانال اجباری
-MSG_CHANNEL_NOT_MEMBER = (
-    "❌ <b>شما در کانال ما عضو نیستید!</b>\n\n"
-    "برای استفاده از ربات، لطفاً ابتدا در کانال زیر عضو شوید:\n"
-    "{channel_link}\n\n"
-    "پس از عضویت، روی دکمه «بررسی عضویت» بزنید."
-)
-MSG_CHANNEL_CHECK_FAILED = (
-    "❌ بررسی عضویت کانال با مشکل مواجه شد.\n"
-    "لطفاً دوباره تلاش کنید یا به پشتیبانی پیام دهید."
-)
-MSG_CHANNEL_VERIFIED = "✅ <b>تبریک!</b> عضویت شما در کانال تأیید شد. اکنون می‌توانید از ربات استفاده کنید."
 
 MSG_TRIAL_DISABLED = "🚫 تست رایگان در حال حاضر غیرفعال است."
 MSG_TRIAL_ALREADY = (
@@ -207,10 +176,6 @@ BTN_APPROVE = "✅ تأیید"
 BTN_REJECT = "❌ رد"
 BTN_ENTER_PROMO = "🏷 دارم کد تخفیف"
 BTN_REMOVE_PROMO = "✖️ حذف تخفیف"
-
-# دکمه‌های سیستم کانال اجباری
-BTN_CHECK_MEMBERSHIP = "✅ بررسی عضویت"
-BTN_JOIN_CHANNEL = "🔗 عضویت در کانال"
 
 # ---------- کیف داده (split & transfer) ----------
 BTN_SPLIT_FOR_SELF = "➕ ساخت کانفیگ جدید برای خودم"

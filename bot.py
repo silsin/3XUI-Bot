@@ -53,8 +53,6 @@ async def main() -> None:
     for observer in (dp.message, dp.callback_query):
         observer.middleware(DbSessionMiddleware())
         observer.middleware(UserMiddleware())
-        # ChannelVerificationMiddleware فقط اگر لازم باشد اضافه شود
-        # observer.middleware(ChannelVerificationMiddleware())
 
     dp.include_router(get_root_router())
 
