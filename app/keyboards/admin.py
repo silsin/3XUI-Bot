@@ -33,6 +33,7 @@ def home() -> InlineKeyboardMarkup:
     b.button(text="📣 پیام همگانی", callback_data=AdminCB(action="broadcast"))
     b.button(text="🔗 بازتولید لینک‌ها", callback_data=AdminCB(action="regen"))
     b.button(text="🔌 تست اتصال پنل", callback_data=AdminCB(action="ping"))
+    b.button(text="📢 کانال اجباری", callback_data=AdminCB(action="channel"))
     b.adjust(2)
     return b.as_markup()
 
@@ -212,3 +213,40 @@ def offer_detail_kb(offer) -> InlineKeyboardMarkup:
     b.adjust(2)
     b.row(_back("offers"))
     return b.as_markup()
+# ─────────────────────── کیبوردهای مدیریت کانال ────────────────────────────
+
+def channel_management() -> InlineKeyboardMarkup:
+    """کیبورد مدیریت کانال اجباری."""
+    b = InlineKeyboardBuilder()
+    
+    # دکمه‌های اصلی
+    b.button(text="✏️ ویرایش تنظیمات", callback_data=AdminCB(action="channel_edit_list"))
+    b.button(text="🔄 فعال/غیرفعال کردن", callback_data=AdminCB(action="channel_toggle"))
+    b.button(text="👥 کاربران تأیید نشده", callback_data=AdminCB(action="channel_unverified"))
+    b.button(text="✅ تأیید دستی کاربر", callback_data=AdminCB(action="channel_verify_user"))
+    b.button(text="🔍 تست عضویت", callback_data=AdminCB(action="channel_test"))
+    
+    b.adjust(2)
+    b.row(_back("home"))
+    return b.as_markup()
+
+
+def channel_edit_list() -> InlineKeyboardMarkup:
+    """لیست تنظیمات کانال برای ویرایش."""
+    from app.texts import (
+        S_CHANNEL_ENABLED,
+        S_CHANNEL_USERNAME,
+        S_CHANNEL_ID,
+        S_CHANNEL_INVITE_LINK,
+        S_CHANNEL_VERIFICATION_TEXT,
+    )
+    
+    fields = [
+        (S_CHANNEL_ENABLED, "وضعیت کانال اجباری"),
+        (S_CHANNEL_USERNAME, "آیدی کانال (مثال: @channel)"),
+        (S_CHANNEL_ID, "شناسه عددی کانال"),
+        (S_CHANNEL_INVITE_LINK, "لینک دعوت کانال"),
+        (S_CHANNEL_VERIFICATION_TEXT, "متن درخواست عضویت"),
+    ]
+    
+    return edit_list(fields, back_action="channel")

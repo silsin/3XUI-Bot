@@ -186,3 +186,6 @@ class Actions:
     # متفرقه
     GUIDE = "guide"
     SUPPORT = "support"
+    
+    # تأیید کانال
+    CHANNEL_VERIFIED = "channel_verified"

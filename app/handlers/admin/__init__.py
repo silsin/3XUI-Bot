@@ -1,6 +1,6 @@
 from aiogram import Router
 
-from app.handlers.admin import activity, approval, offers, panel
+from app.handlers.admin import activity, approval, channel, offers, panel
 
 
 def get_admin_router() -> Router:
@@ -9,4 +9,5 @@ def get_admin_router() -> Router:
     router.include_router(panel.router)
     router.include_router(activity.router)
     router.include_router(offers.router)
+    router.include_router(channel.router)
     return router

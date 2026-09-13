@@ -55,6 +55,7 @@ class User(Base):
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
     referrer_id: Mapped[int | None] = mapped_column(BigInteger, index=True)
     referral_rewarded: Mapped[bool] = mapped_column(Boolean, default=False)
+    channel_verified: Mapped[bool] = mapped_column(Boolean, default=False)  # تأیید عضویت در کانال
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     services: Mapped[list["Service"]] = relationship(back_populates="user")

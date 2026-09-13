@@ -49,10 +49,11 @@ async def main() -> None:
     )
     dp = Dispatcher(storage=MemoryStorage())
 
-    # میدلورها: نشست دیتابیس سپس کاربر، روی پیام و کالبک
+    # میدلورها: نشست دیتابیس سپس کاربر، سپس بررسی کانال، روی پیام و کالبک
     for observer in (dp.message, dp.callback_query):
         observer.middleware(DbSessionMiddleware())
         observer.middleware(UserMiddleware())
+        observer.middleware(ChannelVerificationMiddleware())
 
     dp.include_router(get_root_router())
 
