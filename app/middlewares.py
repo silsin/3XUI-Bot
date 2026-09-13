@@ -86,89 +86,88 @@ class ChannelVerificationMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: dict[str, Any],
     ) -> Any:
-        tg_user: TgUser | None = data.get("event_from_user")
-        session = data.get("session")
-        user = data.get("user")
-        is_admin = data.get("is_admin", False)
-        
-        # اگر کاربر وجود نداشته باشد یا ادمین باشد، اجازه دسترسی بده
-        if tg_user is None or session is None or tg_user.is_bot or is_admin:
-            return await handler(event, data)
-
-        # اگر کاربر مسدود شده باشد، قبلاً در UserMiddleware بررسی شده
-        if user and user.is_blocked:
-            return await handler(event, data)
-
-        # بررسی فعال بودن سیستم کانال اجباری
-        settings = get_settings()
-        from app.services import settings_service as cfg
-        from app.texts import S_CHANNEL_ENABLED, S_CHANNEL_USERNAME, S_CHANNEL_INVITE_LINK, S_CHANNEL_VERIFICATION_TEXT
-        
-        channel_enabled = await cfg.get_bool(session, S_CHANNEL_ENABLED, False)
-        
-        # اگر سیستم کانال غیرفعال باشد، اجازه دسترسی بده
-        if not channel_enabled:
-            return await handler(event, data)
-
-        # اگر کاربر قبلاً تأیید شده باشد، اجازه دسترسی بده
-        if user and user.channel_verified:
-            return await handler(event, data)
-
-        # اگر پیام از نوع پیام متنی یا کال‌بک نباشد (مثلاً کامند)، اجازه بده
-        # فقط پیام‌های متنی و کال‌بک‌ها نیاز به بررسی دارند
-        from aiogram.types import Message, CallbackQuery
-        
-        if not isinstance(event, (Message, CallbackQuery)):
-            return await handler(event, data)
-
-        # بررسی اینکه آیا کاربر سعی می‌کند عضویت خود را تأیید کند
-        if isinstance(event, CallbackQuery) and event.data == "check_channel_membership":
-            return await handler(event, data)
-        
-        if isinstance(event, Message):
-            # بررسی اینکه آیا کاربر در حال بررسی عضویت است
-            text = event.text or ""
-            if text.strip() in ["بررسی عضویت", "/check_channel"]:
+        try:
+            tg_user: TgUser | None = data.get("event_from_user")
+            session = data.get("session")
+            user = data.get("user")
+            is_admin = data.get("is_admin", False)
+            
+            # اگر کاربر وجود نداشته باشد یا ادمین باشد، اجازه دسترسی بده
+            if tg_user is None or session is None or tg_user.is_bot or is_admin:
                 return await handler(event, data)
-        
-        # در غیر این صورت، کاربر باید ابتدا عضویت خود را تأیید کند
-        # درخواست عضویت در کانال را نشان بده
-        channel_username = await cfg.get(session, S_CHANNEL_USERNAME, "")
-        channel_invite_link = await cfg.get(session, S_CHANNEL_INVITE_LINK, "")
-        verification_text = await cfg.get(session, S_CHANNEL_VERIFICATION_TEXT, "")
-        
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-        from app.texts import BTN_CHECK_MEMBERSHIP, BTN_JOIN_CHANNEL, MSG_CHANNEL_NOT_MEMBER
-        
-        # اگر لینک دعوت موجود نباشد اما آیدی کانال موجود باشد
-        if not channel_invite_link and channel_username:
-            channel_invite_link = f"https://t.me/{channel_username.lstrip('@')}"
-        
-        # اگر هیچ لینکی موجود نباشد، خطا بده
-        if not channel_invite_link:
-            logger.error("کانال اجباری فعال است اما لینک دعوت تنظیم نشده است.")
+
+            # اگر کاربر مسدود شده باشد، قبلاً در UserMiddleware بررسی شده
+            if user and user.is_blocked:
+                return await handler(event, data)
+
+            # بررسی فعال بودن سیستم کانال اجباری
+            from app.services import settings_service as cfg
+            from app.texts import S_CHANNEL_ENABLED
+            
+            channel_enabled = await cfg.get_bool(session, S_CHANNEL_ENABLED, False)
+            
+            # اگر سیستم کانال غیرفعال باشد، اجازه دسترسی بده
+            if not channel_enabled:
+                return await handler(event, data)
+
+            # اگر کاربر قبلاً تأیید شده باشد، اجازه دسترسی بده
+            if user and hasattr(user, 'channel_verified') and user.channel_verified:
+                return await handler(event, data)
+
+            # اگر پیام از نوع پیام متنی یا کال‌بک نباشد (مثلاً کامند)، اجازه بده
+            from aiogram.types import Message, CallbackQuery
+            
+            if not isinstance(event, (Message, CallbackQuery)):
+                return await handler(event, data)
+
+            # بررسی اینکه آیا کاربر سعی می‌کند عضویت خود را تأیید کند
+            if isinstance(event, CallbackQuery) and event.data and "check_channel" in event.data:
+                return await handler(event, data)
+            
+            if isinstance(event, Message) and event.text:
+                text = event.text.strip()
+                if text in ["بررسی عضویت", "/check_channel", "/start"]:
+                    return await handler(event, data)
+            
+            # در غیر این صورت، کاربر باید ابتدا عضویت خود را تأیید کند
+            from app.texts import S_CHANNEL_USERNAME, S_CHANNEL_INVITE_LINK, S_CHANNEL_VERIFICATION_TEXT
+            from app.texts import BTN_CHECK_MEMBERSHIP, BTN_JOIN_CHANNEL, MSG_CHANNEL_NOT_MEMBER
+            from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+            from app.utils.formatting import render
+            
+            channel_username = await cfg.get(session, S_CHANNEL_USERNAME, "")
+            channel_invite_link = await cfg.get(session, S_CHANNEL_INVITE_LINK, "")
+            verification_text = await cfg.get(session, S_CHANNEL_VERIFICATION_TEXT, "")
+            
+            # اگر لینک دعوت موجود نباشد اما آیدی کانال موجود باشد
+            if not channel_invite_link and channel_username:
+                channel_invite_link = f"https://t.me/{channel_username.lstrip('@')}"
+            
+            # اگر هیچ لینکی موجود نباشد، گذاشت بده
+            if not channel_invite_link:
+                logger.warning("کانال اجباری فعال است اما لینک دعوت تنظیم نشده است.")
+                return await handler(event, data)
+            
+            # نمایش پیام درخواست عضویت
+            message_text = render(
+                verification_text or MSG_CHANNEL_NOT_MEMBER,
+                channel_link=channel_invite_link
+            )
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text=BTN_JOIN_CHANNEL, url=channel_invite_link),
+                    InlineKeyboardButton(text=BTN_CHECK_MEMBERSHIP, callback_data="check_channel_membership")
+                ]
+            ])
+            
+            if isinstance(event, Message):
+                await event.answer(message_text, reply_markup=keyboard)
+            elif isinstance(event, CallbackQuery):
+                await event.message.answer(message_text, reply_markup=keyboard)
+                await event.answer()
+            
+            return None
+        except Exception as e:
+            logger.error(f"خطا در ChannelVerificationMiddleware: {e}")
             return await handler(event, data)
-        
-        # نمایش پیام درخواست عضویت
-        from aiogram.utils.formatting import as_list, as_line, Text
-        from app.utils.formatting import render
-        
-        message_text = render(
-            verification_text or MSG_CHANNEL_NOT_MEMBER,
-            channel_link=channel_invite_link
-        )
-        
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text=BTN_JOIN_CHANNEL, url=channel_invite_link),
-                InlineKeyboardButton(text=BTN_CHECK_MEMBERSHIP, callback_data="check_channel_membership")
-            ]
-        ])
-        
-        if isinstance(event, Message):
-            await event.answer(message_text, reply_markup=keyboard)
-        elif isinstance(event, CallbackQuery):
-            await event.message.answer(message_text, reply_markup=keyboard)
-            await event.answer()  # کال‌بک را پاسخ بده
-        
-        return None  # هندلر اصلی اجرا نشود
