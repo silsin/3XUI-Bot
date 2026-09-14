@@ -38,8 +38,8 @@ services:
       - ./backups:/backups
       # اسکریپت بک‌اپ
       - ./scripts/backup.sh:/backup.sh:ro
-    entrypoint: sh
-    command: -c 'apk add --no-cache dcron bash && exec crond -f -l 2'
+    entrypoint: /bin/sh
+    command: -c 'apk add --no-cache bash gzip && chmod +x /backup.sh && exec /bin/sh /backup-loop.sh'
     depends_on:
       - bot
 
