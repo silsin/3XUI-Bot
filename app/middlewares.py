@@ -11,7 +11,7 @@ from aiogram.types import CallbackQuery, Message, TelegramObject, Update, User a
 from app.config import get_settings
 from app.db.models import User
 from app.db.session import get_sessionmaker
-from app.texts import MSG_BLOCKED
+from app.texts import MSG_BLOCKED, S_REQUIRED_CHANNEL_ENABLED, S_REQUIRED_CHANNEL_ID
 
 logger = logging.getLogger(__name__)
 
@@ -77,3 +77,72 @@ class UserMiddleware(BaseMiddleware):
             return None
 
         return await handler(event, data)
+
+
+
+class ChannelMembershipMiddleware(BaseMiddleware):
+    """چک می‌کند که کاربر عضو کانال الزامی است یا خیر.
+    
+    اگر کانال الزامی فعال باشد و کاربر عضو نباشد، اجازه ندهید به handler برسند.
+    """
+
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: dict[str, Any],
+    ) -> Any:
+        from app.services import settings_service as cfg
+        
+        session = data.get("session")
+        user = data.get("user")
+        is_admin = data.get("is_admin", False)
+        
+        if session is None or user is None or is_admin:
+            # اگر admin است یا کاربر ثبت نشده، اجازه بدهید
+            return await handler(event, data)
+        
+        # چک کن که عضویت الزامی فعال است؟
+        channel_enabled = await cfg.get(session, S_REQUIRED_CHANNEL_ENABLED, False)
+        if not channel_enabled:
+            return await handler(event, data)
+        
+        # دریافت شناسه کانال
+        channel_id = await cfg.get(session, S_REQUIRED_CHANNEL_ID, None)
+        if not channel_id:
+            # اگر کانال تنظیم نشده، اجازه بدهید
+            return await handler(event, data)
+        
+        # چک کن که کاربر عضو کانال است؟
+        try:
+            member = await data["bot"].get_chat_member(channel_id, user.id)
+            # وضعیت‌های معتبر: member, creator, administrator, restricted
+            if member.status in ["member", "creator", "administrator", "restricted"]:
+                # عضو است
+                return await handler(event, data)
+        except Exception as e:
+            logger.warning(f"Failed to check channel membership for user {user.id}: {e}")
+            # اگر خطا شد، اجازه بدهید (بهتر از مسدود کردن)
+            return await handler(event, data)
+        
+        # کاربر عضو نیست - ذخیره کن و اطلاع بدهید
+        data["channel_membership_required"] = True
+        data["required_channel_id"] = channel_id
+        
+        # سعی کن پیام ارسال کن (اگر Message/CallbackQuery است)
+        try:
+            if isinstance(event, Message):
+                await event.answer(
+                    "⚠️ ابتدا باید عضو کانال ما شوید.\n\n"
+                    "لطفاً بر روی دکمه زیر کلیک کنید و عضو شوید، سپس دوباره سعی کنید."
+                )
+            elif isinstance(event, CallbackQuery):
+                await event.answer(
+                    "⚠️ ابتدا باید عضو کانال ما شوید.",
+                    show_alert=True
+                )
+        except Exception as e:
+            logger.warning(f"Failed to send membership required message: {e}")
+        
+        # خارج شو - handler را فراخوانی نکن
+        return None

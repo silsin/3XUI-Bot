@@ -19,7 +19,7 @@ MAIN_BUTTONS = [
     [BTN_EARN, BTN_BUY],
     [BTN_RENEW, BTN_MY_SERVICES],
     [BTN_TRIAL, BTN_POINTS],
-    [BTN_WALLET_BALANCE, BTN_MY_WALLET],
+    [BTN_WALLET_BALANCE],
     [BTN_GUIDE, BTN_INVITE, BTN_SUPPORT],
 ]
 
@@ -44,6 +44,10 @@ S_REDEEM_MIN_DAYS = "redeem_min_days"
 S_CONFIG_CAPTION = "config_caption"
 # فهرست inboundهای چند-پروتکل (با کاما). خالی = استفاده از inbound پکیج/تنظیمات
 S_MULTI_INBOUNDS = "multi_inbounds"
+# تنظیمات عضویت الزامی در کانال
+S_REQUIRED_CHANNEL_ENABLED = "required_channel_enabled"  # True/False برای فعال/غیرفعال
+S_REQUIRED_CHANNEL_ID = "required_channel_id"  # شناسه کانال (منفی برای گروپ)
+S_REQUIRED_CHANNEL_NAME = "required_channel_name"  # نام کانال برای نمایش
 
 DEFAULT_SETTINGS: dict[str, str] = {
     S_WELCOME_TEXT: (
@@ -118,6 +122,9 @@ DEFAULT_SETTINGS: dict[str, str] = {
         "<code>{link}</code>\n\n"
         "برای راهنمای اتصال از «آموزش استفاده» استفاده کنید."
     ),
+    S_REQUIRED_CHANNEL_ENABLED: "0",  # غیرفعال به صورت پیش‌فرض
+    S_REQUIRED_CHANNEL_ID: "",  # خالی
+    S_REQUIRED_CHANNEL_NAME: "کانال ما",  # نام پیش‌فرض
 }
 
 # ---------- پیام‌های ثابت ----------

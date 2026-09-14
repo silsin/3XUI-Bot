@@ -27,6 +27,7 @@ def home() -> InlineKeyboardMarkup:
     b.button(text="🏅 تنظیمات امتیاز", callback_data=AdminCB(action="points"))
     b.button(text="🧩 اینباندهای کانفیگ", callback_data=AdminCB(action="multi"))
     b.button(text="🏷 تخفیف‌ها و پیشنهادها", callback_data=AdminCB(action="offers"))
+    b.button(text="🔐 تنظیمات کانال الزامی", callback_data="setting:required_channel")
     b.button(text="💰 مدیریت کیف پول", callback_data="wallet_menu:home")
     b.button(text="👥 کاربران", callback_data=AdminCB(action="users"))
     b.button(text="📊 آمار", callback_data=AdminCB(action="stats"))

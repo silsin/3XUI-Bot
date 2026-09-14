@@ -32,6 +32,8 @@ class AdminFlow(StatesGroup):
     wallet_bonus_user = State()
     wallet_bonus_amount = State()
     wallet_bonus_reason = State()
+    channel_name = State()
+    channel_id = State()
 
 
 class WalletTopupFlow(StatesGroup):

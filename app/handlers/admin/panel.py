@@ -737,3 +737,133 @@ async def broadcast_send(
         f"✅ ارسال شد: {fa_digits(sent)} | ناموفق: {fa_digits(failed)}",
         reply_markup=kb.back_home(),
     )
+
+
+
+# ════════════════════════ تنظیمات کانال الزامی ════════════════════════
+
+
+@router.callback_query(F.data == "setting:required_channel")
+async def required_channel_menu(call: CallbackQuery, session: AsyncSession) -> None:
+    """منوی تنظیمات کانال الزامی."""
+    from app.texts import S_REQUIRED_CHANNEL_ENABLED, S_REQUIRED_CHANNEL_ID, S_REQUIRED_CHANNEL_NAME
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    
+    enabled = await cfg.get(session, S_REQUIRED_CHANNEL_ENABLED, False)
+    channel_id = await cfg.get(session, S_REQUIRED_CHANNEL_ID, None)
+    channel_name = await cfg.get(session, S_REQUIRED_CHANNEL_NAME, "کانال")
+    
+    status = "✅ فعال" if enabled else "❌ غیرفعال"
+    
+    text = (
+        f"<b>🔐 تنظیمات کانال الزامی</b>\n\n"
+        f"وضعیت: {status}\n"
+        f"کانال: {channel_name}\n"
+        f"آیدی: {channel_id or 'تنظیم نشده'}\n\n"
+        f"<i>کاربران جدید باید ابتدا عضو این کانال شوند.</i>"
+    )
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="🔄 تغییر وضعیت",
+        callback_data="channel_toggle"
+    )
+    builder.button(text="🏷 تغییر نام کانال", callback_data="channel_name")
+    builder.button(text="🆔 تغییر آیدی کانال", callback_data="channel_id")
+    builder.button(text="🔙 بازگشت", callback_data="setting:home")
+    builder.adjust(1)
+    
+    await call.message.edit_text(text, reply_markup=builder.as_markup())
+    await call.answer()
+
+
+@router.callback_query(F.data == "channel_toggle")
+async def channel_toggle(call: CallbackQuery, session: AsyncSession) -> None:
+    """فعال/غیرفعال کردن کانال الزامی."""
+    from app.texts import S_REQUIRED_CHANNEL_ENABLED
+    
+    current = await cfg.get(session, S_REQUIRED_CHANNEL_ENABLED, False)
+    new_value = not current
+    await cfg.set(session, S_REQUIRED_CHANNEL_ENABLED, new_value)
+    
+    status = "✅ فعال شد" if new_value else "❌ غیرفعال شد"
+    await call.answer(status, show_alert=False)
+    
+    # نمایش دوباره منو
+    await required_channel_menu(call, session)
+
+
+@router.callback_query(F.data == "channel_name")
+async def channel_name_ask(call: CallbackQuery, state: FSMContext) -> None:
+    """درخواست نام کانال."""
+    await state.set_state(AdminFlow.channel_name)
+    await call.message.answer("نام کانال را وارد کنید (مثال: @mychannel یا کانال های تبلیغات):")
+    await call.answer()
+
+
+@router.message(AdminFlow.channel_name)
+async def channel_name_set(
+    message: Message, session: AsyncSession, state: FSMContext
+) -> None:
+    """تنظیم نام کانال."""
+    from app.texts import S_REQUIRED_CHANNEL_NAME
+    
+    channel_name = message.text.strip()
+    await cfg.set(session, S_REQUIRED_CHANNEL_NAME, channel_name)
+    await state.clear()
+    
+    await message.answer(f"✅ نام کانال تنظیم شد: <b>{channel_name}</b>")
+
+
+@router.callback_query(F.data == "channel_id")
+async def channel_id_ask(call: CallbackQuery, state: FSMContext) -> None:
+    """درخواست آیدی کانال."""
+    await state.set_state(AdminFlow.channel_id)
+    await call.message.answer(
+        "آیدی کانال را وارد کنید:\n\n"
+        "برای کانال‌های عمومی: -100123456789\n"
+        "برای گروپ‌های خصوصی: -100987654321\n\n"
+        "نکته: آیدی را بدون @ و با علامت - شروع کنید."
+    )
+    await call.answer()
+
+
+@router.message(AdminFlow.channel_id)
+async def channel_id_set(
+    message: Message, session: AsyncSession, state: FSMContext
+) -> None:
+    """تنظیم آیدی کانال."""
+    from app.texts import S_REQUIRED_CHANNEL_ID
+    
+    try:
+        # سعی کن آیدی را تبدیل کن
+        channel_id_str = message.text.strip()
+        
+        # اگر شماره است، تبدیل کن
+        try:
+            channel_id = int(channel_id_str)
+        except ValueError:
+            # شاید @username است
+            if channel_id_str.startswith("@"):
+                channel_id = channel_id_str
+            else:
+                raise ValueError("فرمت نادرست")
+        
+        # سعی کن تست کنی
+        try:
+            chat = await message.bot.get_chat(channel_id)
+            await cfg.set(session, S_REQUIRED_CHANNEL_ID, str(channel_id))
+            await state.clear()
+            
+            await message.answer(
+                f"✅ آیدی کانال تنظیم شد:\n\n"
+                f"نام: {chat.title}\n"
+                f"آیدی: {channel_id}"
+            )
+        except Exception as e:
+            await message.answer(f"❌ خطا: نمی‌تونم کانال رو پیدا کنم.\n\n{str(e)}")
+            await state.clear()
+    
+    except Exception as e:
+        await message.answer(f"❌ خطا: {str(e)}")
+        await state.clear()

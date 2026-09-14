@@ -15,7 +15,7 @@ from aiogram.types import BotCommand
 from app.config import get_settings
 from app.db.session import dispose_db, get_sessionmaker, init_db
 from app.handlers import get_root_router
-from app.middlewares import DbSessionMiddleware, UserMiddleware
+from app.middlewares import DbSessionMiddleware, UserMiddleware, ChannelMembershipMiddleware
 from app.scheduler import setup_scheduler
 from app.services import settings_service as cfg
 from app.services.vpn import close_provider
@@ -53,6 +53,7 @@ async def main() -> None:
     for observer in (dp.message, dp.callback_query):
         observer.middleware(DbSessionMiddleware())
         observer.middleware(UserMiddleware())
+        observer.middleware(ChannelMembershipMiddleware())
 
     dp.include_router(get_root_router())
 

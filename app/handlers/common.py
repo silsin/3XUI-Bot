@@ -103,3 +103,78 @@ async def cmd_menu(message: Message, is_admin: bool, session: AsyncSession) -> N
 async def unknown(message: Message, is_admin: bool) -> None:
     """آخرین هندلر: پیام‌های متنی ناشناخته."""
     await message.answer(MSG_UNKNOWN, reply_markup=reply.main_menu(is_admin))
+
+
+
+async def show_channel_membership_required(
+    message: Message, session: AsyncSession, channel_id: int | str
+) -> None:
+    """نمایش پیام و دکمه عضویت کانال."""
+    from app.services import settings_service as cfg
+    from app.texts import S_REQUIRED_CHANNEL_NAME
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    from aiogram.types import InlineKeyboardButton
+    
+    channel_name = await cfg.get(session, S_REQUIRED_CHANNEL_NAME, "کانال ما")
+    
+    try:
+        # دریافت لینک دعوت کانال
+        invite_link = await message.bot.create_chat_invite_link(
+            channel_id,
+            creates_join_request=False
+        )
+        link = invite_link.invite_link
+    except Exception as e:
+        logger.warning(f"Failed to create invite link: {e}")
+        link = None
+    
+    text = (
+        f"🔗 <b>عضویت الزامی</b>\n\n"
+        f"برای استفاده از این ربات، ابتدا باید عضو {channel_name} شوید.\n\n"
+        f"پس از عضویت، دوباره سعی کنید."
+    )
+    
+    builder = InlineKeyboardBuilder()
+    if link:
+        builder.button(
+            text=f"🔗 عضویت در {channel_name}",
+            url=link
+        )
+    builder.button(text="✅ تأیید عضویت", callback_data="check_membership")
+    builder.adjust(1)
+    
+    await message.answer(text, reply_markup=builder.as_markup())
+
+
+@router.callback_query(F.data == "check_membership")
+async def check_membership(
+    call, session: AsyncSession, user: User
+) -> None:
+    """بررسی دوباره عضویت کاربر."""
+    from app.services import settings_service as cfg
+    from app.texts import S_REQUIRED_CHANNEL_ID
+    
+    channel_id = await cfg.get(session, S_REQUIRED_CHANNEL_ID, None)
+    if not channel_id:
+        await call.answer("❌ کانال تنظیم نشده است.", show_alert=True)
+        return
+    
+    try:
+        member = await call.bot.get_chat_member(channel_id, user.id)
+        if member.status in ["member", "creator", "administrator", "restricted"]:
+            await call.answer("✅ عضویت تأیید شد! اکنون می‌توانید استفاده کنید.", show_alert=False)
+            await call.message.delete()
+            # نمایش منوی اصلی
+            await call.message.answer(
+                "🎉 خوش آمدید!\n\n"
+                "میتوانید از ربات استفاده کنید.",
+                reply_markup=reply.main_menu(False)
+            )
+            return
+    except Exception as e:
+        logger.warning(f"Failed to check membership: {e}")
+    
+    await call.answer(
+        "❌ هنوز عضو کانال نشده‌اید. لطفاً ابتدا عضو شوید.",
+        show_alert=True
+    )

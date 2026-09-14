@@ -50,6 +50,11 @@ async def set_value(session: AsyncSession, key: str, value: str) -> None:
     await session.commit()
 
 
+async def set(session: AsyncSession, key: str, value) -> None:
+    """تنظیم یک کلید (هر نوع داده)."""
+    await set_value(session, key, str(value))
+
+
 async def get_many(session: AsyncSession, keys: list[str]) -> dict[str, str]:
     rows = (
         await session.execute(select(Setting).where(Setting.key.in_(keys)))
