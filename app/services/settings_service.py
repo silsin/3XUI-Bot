@@ -50,7 +50,7 @@ async def set_value(session: AsyncSession, key: str, value: str) -> None:
     await session.commit()
 
 
-async def set(session: AsyncSession, key: str, value) -> None:
+async def set_setting(session: AsyncSession, key: str, value) -> None:
     """تنظیم یک کلید (هر نوع داده)."""
     await set_value(session, key, str(value))
 
