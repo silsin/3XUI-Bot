@@ -264,8 +264,10 @@ async def show_checkout(
     wallet_enabled = await wallet_service.is_enabled(user.id)
     
     # بررسی اینکه موجودی کافی است یا نه
-    insufficient_balance = wallet_enabled and wallet_balance < final_price
     has_sufficient_balance = wallet_enabled and wallet_balance >= final_price
+    insufficient_balance = wallet_enabled and not has_sufficient_balance
+    
+    logger.info(f"Checkout for user {user.id}: wallet_enabled={wallet_enabled}, balance={wallet_balance}, final_price={final_price}, has_sufficient={has_sufficient_balance}")
     
     # اگر کیف پول فعال باشد، اطلاعات آن را نمایش بده
     if wallet_enabled:
@@ -453,7 +455,11 @@ async def create_order(
     wallet_enabled = await wallet_service.is_enabled(user.id)
     
     # اگر از کیف پول پرداخت شده — use_wallet باید explicit True باشد
+    logger.info(f"Wallet check for user {user.id}: enabled={wallet_enabled}, balance={wallet_balance}, final_amount={final_amount}")
+    logger.info(f"callback_data.use_wallet={callback_data.use_wallet}, type={type(callback_data.use_wallet)}")
+    
     use_wallet = callback_data.use_wallet is True and wallet_enabled and wallet_balance >= final_amount
+    logger.info(f"use_wallet result: {use_wallet}")
     
     order = Order(
         user_id=user.id,
