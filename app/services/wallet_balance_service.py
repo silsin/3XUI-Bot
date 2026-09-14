@@ -189,11 +189,10 @@ class WalletBalanceService:
             tuple: (لیست تراکنش‌ها، تعداد کل)
         """
         # تعداد کل تراکنش‌ها
-        count_stmt = select(WalletTransaction).where(
-            WalletTransaction.user_id == user_id
-        )
-        total_count = await self.session.scalar(
-            select(lambda: len(count_stmt))
+        count_result = await self.session.scalar(
+            select(func.count(WalletTransaction.id)).where(
+                WalletTransaction.user_id == user_id
+            )
         ) or 0
         
         # دریافت تراکنش‌ها با offset و limit
@@ -207,14 +206,7 @@ class WalletBalanceService:
 
         transactions = await self.session.scalars(stmt)
         
-        # تعداد دقیق کل
-        count_result = await self.session.scalar(
-            select(func.count(WalletTransaction.id)).where(
-                WalletTransaction.user_id == user_id
-            )
-        )
-        
-        return list(transactions), count_result or 0
+        return list(transactions), count_result
 
     async def set_enabled(self, user_id: int, enabled: bool) -> UserWallet:
         """فعال/غیرفعال کردن کیف پول کاربر.
