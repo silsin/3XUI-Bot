@@ -22,7 +22,6 @@ from app.utils.formatting import money
 
 logger = logging.getLogger(__name__)
 router = Router(name="admin_wallet_topup")
-router.callback_query.filter(IsAdmin())
 
 
 class AdminTopupCB:
@@ -42,18 +41,23 @@ async def topup_approve(
     call: CallbackQuery, session: AsyncSession
 ) -> None:
     """تایید درخواست شارژ."""
+    logger.info(f"topup_approve called with data: {call.data}")
+    
     try:
         request_id = int(call.data.split(":")[1])
     except (ValueError, IndexError):
+        logger.error(f"Failed to parse request_id from: {call.data}")
         await call.answer("❌ خطا: شناسه نامعتبر", show_alert=True)
         return
 
     topup_request = await session.get(WalletTopupRequest, request_id)
     if not topup_request:
+        logger.warning(f"WalletTopupRequest not found: {request_id}")
         await call.answer("❌ درخواست یافت نشد", show_alert=True)
         return
 
     if topup_request.status != WalletTopupRequestStatus.AWAITING_APPROVAL:
+        logger.warning(f"Request {request_id} has status: {topup_request.status}")
         await call.answer("❌ این درخواست قبلاً بررسی شده است", show_alert=True)
         return
 
@@ -75,6 +79,7 @@ async def topup_approve(
     )
 
     await session.commit()
+    logger.info(f"Topup request {request_id} approved successfully")
 
     text = (
         f"✅ <b>درخواست تایید شد</b>\n\n"
@@ -84,7 +89,12 @@ async def topup_approve(
         f"مبلغ به کیف پول کاربر اضافه شد."
     )
 
-    await call.message.edit_text(text)
+    try:
+        await call.message.edit_text(text)
+    except Exception as e:
+        logger.exception("Failed to edit message: %s", e)
+        await call.message.answer(text)
+    
     await call.answer("✅ درخواست تایید شد")
 
     # اطلاع به کاربر
@@ -138,7 +148,12 @@ async def topup_reject(
         f"درخواست توسط ادمین رد شده است."
     )
 
-    await call.message.edit_text(text)
+    try:
+        await call.message.edit_text(text)
+    except Exception as e:
+        logger.exception("Failed to edit message: %s", e)
+        await call.message.answer(text)
+    
     await call.answer("✅ درخواست رد شد")
 
     # اطلاع به کاربر
