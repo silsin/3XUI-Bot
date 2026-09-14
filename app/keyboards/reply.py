@@ -10,6 +10,7 @@ from app.texts import (
     BTN_INVITE,
     BTN_MY_SERVICES,
     BTN_MY_WALLET,
+    BTN_WALLET_BALANCE,
     BTN_POINTS,
     BTN_RENEW,
     BTN_SUPPORT,
@@ -31,6 +32,7 @@ _BTN_STYLE: dict[str, str] = {
     BTN_INVITE: "danger",
     BTN_SUPPORT: "danger",
     BTN_MY_WALLET: "success",
+    BTN_WALLET_BALANCE: "success",
     BTN_EARN: "success",
     ADMIN_BUTTON: "danger",
 }

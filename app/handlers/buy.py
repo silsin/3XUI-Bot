@@ -13,12 +13,14 @@ from app.config import get_settings
 from app.db.models import (
     Duration,
     Offer,
+    OfferType,
     Order,
     OrderKind,
     OrderStatus,
     Package,
     Service,
     User,
+    WalletTransactionType,
 )
 from app.keyboards import inline
 from app.keyboards import reply
@@ -104,6 +106,10 @@ async def _build_checkout_text(
     )
     if service_id:
         text = "♻️ <b>تمدید سرویس</b>\n\n" + text
+
+    # اگر بونوس کیف پول وجود دارد، به متن اضافه کن
+    if offer and offer.offer_type == OfferType.WALLET_BONUS:
+        text += f"\n💳 <b>بونوس کیف پول:</b> {money(offer.value)} تومان"
 
     # بنر تخفیف‌های خودکار فعال (فقط وقتی تخفیف اعمال نشده)
     if not offer:
@@ -222,9 +228,26 @@ async def show_checkout(
         if auto:
             offer = auto[0]  # بهترین تخفیف خودکار
 
-    text, _, _, _ = await _build_checkout_text(
+    text, final_price, discount_amount, bonus_mb = await _build_checkout_text(
         session, package, duration, offer, callback_data.service_id
     )
+    
+    # اطلاعات کیف پول
+    from app.services.wallet_balance_service import WalletBalanceService
+    wallet_service = WalletBalanceService(session)
+    wallet_balance = await wallet_service.get_balance(user.id)
+    wallet_enabled = await wallet_service.is_enabled(user.id)
+    
+    # اگر کیف پول فعال باشد، اطلاعات آن را نمایش بده
+    if wallet_enabled:
+        wallet_info = f"\n\n💳 <b>کیف پول شما:</b> {money(wallet_balance)}"
+        if wallet_balance >= final_price:
+            wallet_info += f" ✅ (موجود برای این خرید)"
+        else:
+            shortage = final_price - wallet_balance
+            wallet_info += f" ⚠️ (کمبود: {money(shortage)})"
+        text += wallet_info
+    
     await call.message.edit_text(
         text,
         reply_markup=inline.checkout_kb(
@@ -232,6 +255,7 @@ async def show_checkout(
             callback_data.package_id,
             callback_data.service_id,
             offer_id=offer.id if offer else 0,
+            wallet_enabled=wallet_enabled and wallet_balance > 0,
         ),
     )
     await call.answer()
@@ -390,12 +414,21 @@ async def create_order(
     final_amount = max(0, package.price - discount_amount)
     final_traffic = package.traffic_mb + bonus_traffic_mb
 
+    # ── بررسی کیف پول ──
+    from app.services.wallet_balance_service import WalletBalanceService
+    wallet_service = WalletBalanceService(session)
+    wallet_balance = await wallet_service.get_balance(user.id)
+    wallet_enabled = await wallet_service.is_enabled(user.id)
+    
+    # اگر از کیف پول پرداخت شده
+    use_wallet = callback_data.use_wallet and wallet_enabled and wallet_balance >= final_amount
+    
     order = Order(
         user_id=user.id,
         package_id=package.id,
         renew_service_id=renew_service_id,
         kind=OrderKind.RENEW if renew_service_id else OrderKind.NEW,
-        status=OrderStatus.AWAITING_RECEIPT,
+        status=OrderStatus.APPROVED if use_wallet else OrderStatus.AWAITING_RECEIPT,
         amount=final_amount,
         days=duration.days,
         traffic_mb=final_traffic,
@@ -407,14 +440,58 @@ async def create_order(
     session.add(order)
     await session.flush()  # برای دریافت order.id
 
-    # ثبت استفاده از تخفیف
+    # ثبت استفاده از تخفیف و اعمال بونوس‌ها
+    wallet_bonus = 0
     if offer:
         await offers.apply_offer(session, offer, package, user.id, order.id)
-    else:
-        await session.commit()
-
+        # اگر تخفیف نوع WALLET_BONUS باشد
+        if offer.offer_type == OfferType.WALLET_BONUS:
+            wallet_bonus = offer.value
+    
+    # اگر از کیف پول استفاده شد
+    if use_wallet and final_amount > 0:
+        await wallet_service.purchase(user.id, final_amount, order.id)
+    
+    # اگر بونوس کیف پول وجود دارد، اضافه کن
+    if wallet_bonus > 0:
+        await wallet_service.deposit(
+            user.id,
+            wallet_bonus,
+            transaction_type=WalletTransactionType.OFFER_BONUS,
+            order_id=order.id,
+            admin_note=f"بونوس جشنواره: {offer.title}"
+        )
+    
+    await session.commit()
     await session.refresh(order)
 
+    # اگر از کیف پول پرداخت شد، سفارش تایید شود
+    if use_wallet:
+        from app.services.provisioning import add_service
+        success = await add_service(session, order)
+        if success:
+            await call.message.edit_text(
+                f"✅ <b>خرید موفق!</b>\n\n"
+                f"سفارش #{order.id} تأیید شد.\n"
+                f"مبلغ پرداختی از کیف پول: {money(final_amount)} تومان\n\n"
+                f"سرویس شما فعال شد!",
+                reply_markup=inline.done_kb(),
+            )
+            await activity.log_activity(
+                session, user.id, "order_completed_wallet",
+                {"order_id": order.id, "amount": final_amount}
+            )
+        else:
+            await call.message.edit_text(
+                f"⚠️ <b>خطا!</b>\n\n"
+                f"سفارش رسیده اما خطا در ساخت سرویس. لطفاً با پشتیبانی تماس بگیرید.",
+                reply_markup=reply.main_menu(get_settings().is_admin(user.id))
+            )
+            logger.error("Failed to provision service for order %s", order.id)
+        await call.answer()
+        return
+
+    # درخواست رسید (روش معمول)
     card_number = await cfg.get(session, S_CARD_NUMBER)
     instruction = render(
         await cfg.get(session, S_BUY_INSTRUCTION),

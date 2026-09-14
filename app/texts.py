@@ -12,12 +12,14 @@ BTN_GUIDE = "آموزش استفاده"
 BTN_INVITE = "دعوت از دوستان"
 BTN_SUPPORT = "پشتیبانی"
 BTN_MY_WALLET = "💾 کیف داده"
+BTN_WALLET_BALANCE = "💳 کیف پول"
 BTN_EARN = "💰 کسب درآمد"
 
 MAIN_BUTTONS = [
     [BTN_EARN, BTN_BUY],
     [BTN_RENEW, BTN_MY_SERVICES],
     [BTN_TRIAL, BTN_POINTS],
+    [BTN_WALLET_BALANCE, BTN_MY_WALLET],
     [BTN_GUIDE, BTN_INVITE, BTN_SUPPORT],
 ]
 

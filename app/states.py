@@ -26,6 +26,9 @@ class AdminFlow(StatesGroup):
     offer_max_uses = State()
     offer_per_user = State()
     offer_valid_days = State()
+    # مراحل مدیریت کیف پول
+    wallet_search = State()
+    wallet_set_balance = State()
 
 
 class WalletFlow(StatesGroup):

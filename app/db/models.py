@@ -289,6 +289,7 @@ class OfferType(str, enum.Enum):
     PERCENT = "percent"       # درصد تخفیف از قیمت
     FIXED = "fixed"           # مبلغ ثابت تخفیف (تومان)
     EXTRA_TRAFFIC = "extra_traffic"  # گیگ اضافه بدون تخفیف قیمت
+    WALLET_BONUS = "wallet_bonus"  # بونوس کیف پول (تومان)
 
 
 class Offer(Base):
@@ -343,3 +344,64 @@ class OfferUse(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     offer: Mapped["Offer"] = relationship(viewonly=True)
+
+
+class WalletTransactionType(str, enum.Enum):
+    """نوع تراکنش کیف پول."""
+    PURCHASE = "purchase"          # خرید اشتراک
+    ADMIN_DEPOSIT = "admin_deposit"  # واریز توسط ادمین
+    ADMIN_WITHDRAW = "admin_withdraw"  # برداشت توسط ادمین
+    REFUND = "refund"              # بازگشت مبلغ
+    OFFER_BONUS = "offer_bonus"    # بونوس از جشنواره
+    REFERRAL_BONUS = "referral_bonus"  # بونوس معرفی
+
+
+class UserWallet(Base):
+    """کیف پول هر کاربر - موجودی و تاریخچه."""
+
+    __tablename__ = "user_wallets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    balance: Mapped[int] = mapped_column(BigInteger, default=0)  # موجودی به تومان
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)  # فعال/غیرفعال شده
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    user: Mapped["User"] = relationship(viewonly=True)
+    transactions: Mapped[list["WalletTransaction"]] = relationship(
+        back_populates="wallet", cascade="all, delete-orphan"
+    )
+
+
+class WalletTransaction(Base):
+    """تاریخچه تراکنش‌های کیف پول."""
+
+    __tablename__ = "wallet_transactions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    wallet_id: Mapped[int] = mapped_column(
+        ForeignKey("user_wallets.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+
+    transaction_type: Mapped[WalletTransactionType] = mapped_column(
+        Enum(WalletTransactionType), index=True
+    )
+    amount: Mapped[int] = mapped_column(BigInteger)  # مبلغ (منفی = برداشت، مثبت = واریز)
+    balance_before: Mapped[int] = mapped_column(BigInteger)  # موجودی قبل
+    balance_after: Mapped[int] = mapped_column(BigInteger)   # موجودی بعد
+
+    # اطلاعات اضافی
+    order_id: Mapped[int | None] = mapped_column(ForeignKey("orders.id", ondelete="SET NULL"))
+    admin_id: Mapped[int | None] = mapped_column(BigInteger)  # ادمین انجام‌دهنده (برای deposit/withdraw)
+    admin_note: Mapped[str | None] = mapped_column(Text)       # توضیح ادمین
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+    wallet: Mapped["UserWallet"] = relationship(back_populates="transactions")

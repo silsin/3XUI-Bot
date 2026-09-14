@@ -37,6 +37,8 @@ def calc_discount(offer: Offer, base_price: int) -> tuple[int, int, int]:
     """
     محاسبه تخفیف و حجم اضافه.
     برمی‌گرداند: (final_price, discount_amount, bonus_traffic_mb)
+    
+    برای WALLET_BONUS: discount_amount بجای تخفیف قیمت، مبلغ بونوس کیف پول است.
     """
     if offer.offer_type == OfferType.PERCENT:
         pct = max(0, min(100, offer.value))
@@ -49,6 +51,10 @@ def calc_discount(offer: Offer, base_price: int) -> tuple[int, int, int]:
 
     elif offer.offer_type == OfferType.EXTRA_TRAFFIC:
         return base_price, 0, offer.value
+    
+    elif offer.offer_type == OfferType.WALLET_BONUS:
+        # بونوس کیف پول: قیمت تغییر نمی‌کند، موجودی کیف پول اضافه می‌شود
+        return base_price, offer.value, 0
 
     return base_price, 0, 0
 
@@ -238,4 +244,7 @@ def offer_summary_text(offer: Offer) -> str:
     elif offer.offer_type == OfferType.EXTRA_TRAFFIC:
         from app.utils.formatting import traffic
         return f"🎁 <b>{offer.title}</b>\n📦 {traffic(offer.value)} حجم اضافه"
+    elif offer.offer_type == OfferType.WALLET_BONUS:
+        from app.utils.formatting import money
+        return f"💳 <b>{offer.title}</b>\n➕ {money(offer.value)} بونوس کیف پول"
     return f"🏷 <b>{offer.title}</b>"

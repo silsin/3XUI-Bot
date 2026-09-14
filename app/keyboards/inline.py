@@ -39,6 +39,7 @@ class BuyCB(CallbackData, prefix="buy"):
     package_id: int = 0
     service_id: int = 0   # غیرصفر یعنی تمدید
     offer_id: int = 0     # غیرصفر یعنی کد تخفیف اعمال شده
+    use_wallet: bool = False  # استفاده از کیف پول برای پرداخت
 
 
 class ServiceCB(CallbackData, prefix="srv"):
@@ -112,8 +113,11 @@ def checkout_kb(
     package_id: int,
     service_id: int = 0,
     offer_id: int = 0,
+    wallet_enabled: bool = False,
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
+    
+    # دکمه خرید عادی
     builder.button(
         text=BTN_CONFIRM_BUY,
         callback_data=BuyCB(
@@ -122,9 +126,26 @@ def checkout_kb(
             package_id=package_id,
             service_id=service_id,
             offer_id=offer_id,
+            use_wallet=False,
         ),
         style="success",
     )
+    
+    # دکمه خرید از کیف پول (اگر فعال باشد)
+    if wallet_enabled:
+        builder.button(
+            text="💳 خرید از کیف پول",
+            callback_data=BuyCB(
+                action="pay",
+                duration_id=duration_id,
+                package_id=package_id,
+                service_id=service_id,
+                offer_id=offer_id,
+                use_wallet=True,
+            ),
+            style="success",
+        )
+    
     # دکمه کد تخفیف یا حذف تخفیف
     if offer_id:
         builder.button(
@@ -518,5 +539,17 @@ def earn_open_kb(services: list) -> InlineKeyboardMarkup:
             callback_data=WalletCB(action="select_service", service_id=svc.id),
             style="primary",
         )
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def done_kb() -> InlineKeyboardMarkup:
+    """دکمه بازگشت به منو پس از تکمیل خرید."""
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="🏠 بازگشت به منو",
+        callback_data="home",
+        style="primary",
+    )
     builder.adjust(1)
     return builder.as_markup()
