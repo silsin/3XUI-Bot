@@ -86,13 +86,11 @@ def wallet_menu_kb(has_balance: bool = False) -> inline.InlineKeyboardMarkup:
     builder.button(
         text="📊 تاریخچه تراکنش‌ها",
         callback_data=WalletBalanceCB.history(0),
-        style="primary",
     )
     
     builder.button(
         text="🏠 بازگشت",
         callback_data=WalletBalanceCB.back(),
-        style="secondary",
     )
     
     builder.adjust(1)
@@ -158,20 +156,17 @@ async def show_wallet_history(
         builder.button(
             text="⬅️ صفحه قبل",
             callback_data=f"wallet:history:{page - 1}",
-            style="primary",
         )
     
     if (page + 1) * limit < total_count:
         builder.button(
             text="صفحه بعد ➡️",
             callback_data=f"wallet:history:{page + 1}",
-            style="primary",
         )
     
     builder.button(
         text="🏠 بازگشت",
         callback_data=WalletBalanceCB.back(),
-        style="secondary",
     )
     
     builder.adjust(1, 1, 1)
