@@ -452,8 +452,8 @@ async def create_order(
     wallet_balance = await wallet_service.get_balance(user.id)
     wallet_enabled = await wallet_service.is_enabled(user.id)
     
-    # اگر از کیف پول پرداخت شده
-    use_wallet = callback_data.use_wallet and wallet_enabled and wallet_balance >= final_amount
+    # اگر از کیف پول پرداخت شده — use_wallet باید explicit True باشد
+    use_wallet = callback_data.use_wallet is True and wallet_enabled and wallet_balance >= final_amount
     
     order = Order(
         user_id=user.id,
