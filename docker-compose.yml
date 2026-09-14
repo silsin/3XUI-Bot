@@ -20,5 +20,28 @@ services:
       # گواهی‌های TLS (فقط-خواندنی)
       - /root/cert:/certs:ro
 
+  backup:
+    image: alpine:latest
+    container_name: alovpn-backup
+    restart: unless-stopped
+    environment:
+      TZ: ${TIMEZONE:-Asia/Tehran}
+      # ساعت اجرای بک‌اپ (ساعت 3 صبح روز روز)
+      BACKUP_HOUR: 03
+      BACKUP_MINUTE: 00
+      # تعداد روزهایی که بک‌اپ نگهداری شود
+      BACKUP_RETENTION_DAYS: 30
+    volumes:
+      # ولوم دیتابیس
+      - bot_data:/app/data:ro
+      # مسیر ذخیره بک‌اپ‌ها
+      - ./backups:/backups
+      # اسکریپت بک‌اپ
+      - ./scripts/backup.sh:/backup.sh:ro
+    entrypoint: sh
+    command: -c 'apk add --no-cache dcron bash && exec crond -f -l 2'
+    depends_on:
+      - bot
+
 volumes:
   bot_data:

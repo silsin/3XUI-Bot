@@ -1,0 +1,22 @@
+# Dockerfile برای سرویس بک‌اپ خودکار
+FROM alpine:3.19
+
+# نصب ابزارهای مورد نیاز
+RUN apk add --no-cache \
+    bash \
+    dcron \
+    gzip \
+    coreutils \
+    util-linux \
+    && rm -rf /var/cache/apk/*
+
+# کپی اسکریپت بک‌اپ
+COPY ./backup.sh /usr/local/bin/backup.sh
+RUN chmod +x /usr/local/bin/backup.sh
+
+# تنظیم صاحب و مجوزهای بک‌اپ
+RUN mkdir -p /backups && chmod 755 /backups
+
+# راه‌اندازی cron
+ENTRYPOINT ["/sbin/crond", "-f", "-l", "2"]
+
