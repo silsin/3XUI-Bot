@@ -183,7 +183,17 @@ async def show_wallet_history(
     
     builder.adjust(1, 1, 1)
     
-    await call.message.edit_text(text, reply_markup=builder.as_markup())
+    try:
+        await call.message.edit_text(text, reply_markup=builder.as_markup())
+    except Exception as e:
+        logger.exception("Failed to edit message in show_wallet_history: %s", e)
+        try:
+            await call.message.answer(text, reply_markup=builder.as_markup())
+        except Exception as e2:
+            logger.exception("Failed to answer message in show_wallet_history: %s", e2)
+            await call.answer("❌ خطا در نمایش تاریخچه", show_alert=True)
+            return
+    
     await call.answer()
     await activity.log_activity(
         session, user.id, "view_wallet_history",
@@ -217,9 +227,14 @@ async def wallet_back(
     if balance == 0:
         text += f"\n\n{MSG_WALLET_EMPTY}"
     
-    await call.message.edit_text(
-        text, reply_markup=wallet_menu_kb(balance > 0)
-    )
+    try:
+        await call.message.edit_text(
+            text, reply_markup=wallet_menu_kb(balance > 0)
+        )
+    except Exception as e:
+        logger.exception("Failed to edit message in wallet_back: %s", e)
+        await call.message.answer(text, reply_markup=wallet_menu_kb(balance > 0))
+    
     await call.answer()
 
 
