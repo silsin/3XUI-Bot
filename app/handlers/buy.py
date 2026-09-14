@@ -522,32 +522,22 @@ async def create_order(
                 order=order,
             )
             
-            # ساخت پیام با کانفیگ‌ها
             text = (
                 f"✅ <b>خرید موفق!</b>\n\n"
                 f"سفارش #{order.id} تأیید شد.\n"
                 f"مبلغ پرداختی از کیف پول: {money(final_amount)} تومان\n\n"
-                f"🎉 <b>سرویس شما فعال شد!</b>\n\n"
-                f"📋 <b>اطلاعات سرویس:</b>\n"
-                f"🔑 نام کاربری: <code>{service.email}</code>\n"
-                f"🔗 لینک اشتراک: <code>{service.sub_link}</code>\n\n"
-                f"⚙️ <b>لینک کانفیگ:</b>\n"
-                f"<code>{service.config_link}</code>\n\n"
-                f"<i>لطفاً بر روی لینک‌های بالا کلیک کنید یا کپی کنید.</i>"
+                f"🎉 <b>سرویس شما فعال شد!</b>\n"
+                f"کانفیگ‌های زیر را دریافت کنید:"
             )
             try:
-                await call.message.edit_text(
-                    text, 
-                    reply_markup=inline.done_kb(),
-                    disable_web_page_preview=True
-                )
+                await call.message.edit_text(text, reply_markup=inline.done_kb())
             except Exception as e:
                 logger.exception("Failed to edit message after wallet purchase: %s", e)
-                await call.message.answer(
-                    text, 
-                    reply_markup=inline.done_kb(),
-                    disable_web_page_preview=True
-                )
+                await call.message.answer(text, reply_markup=inline.done_kb())
+            
+            # ارسال کانفیگ‌ها (همانند خرید عادی)
+            from app.handlers import delivery
+            await delivery.send_config(call.bot, user.id, service, session)
             
             await activity.log_activity(
                 session, user.id, "order_completed_wallet",
