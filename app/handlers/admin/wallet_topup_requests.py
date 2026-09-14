@@ -39,7 +39,7 @@ class AdminTopupCB:
 
 @router.callback_query(F.data.startswith("topup_approve:"))
 async def topup_approve(
-    call: CallbackQuery, session: AsyncSession, admin: User
+    call: CallbackQuery, session: AsyncSession
 ) -> None:
     """تایید درخواست شارژ."""
     try:
@@ -60,8 +60,9 @@ async def topup_approve(
     # تایید درخواست و اضافه‌کردن به کیف پول
     from datetime import datetime, timezone
 
+    admin_id = call.from_user.id
     topup_request.status = WalletTopupRequestStatus.APPROVED
-    topup_request.admin_id = admin.id
+    topup_request.admin_id = admin_id
     topup_request.decided_at = datetime.now(timezone.utc)
 
     wallet_service = WalletBalanceService(session)
@@ -69,7 +70,7 @@ async def topup_approve(
         topup_request.user_id,
         topup_request.amount,
         transaction_type=WalletTransactionType.ADMIN_DEPOSIT,
-        admin_id=admin.id,
+        admin_id=admin_id,
         admin_note=f"تایید درخواست شارژ #{topup_request.id}",
     )
 
@@ -100,7 +101,7 @@ async def topup_approve(
 
 @router.callback_query(F.data.startswith("topup_reject:"))
 async def topup_reject(
-    call: CallbackQuery, session: AsyncSession, admin: User
+    call: CallbackQuery, session: AsyncSession
 ) -> None:
     """رد درخواست شارژ."""
     try:
@@ -121,8 +122,9 @@ async def topup_reject(
     # رد درخواست
     from datetime import datetime, timezone
 
+    admin_id = call.from_user.id
     topup_request.status = WalletTopupRequestStatus.REJECTED
-    topup_request.admin_id = admin.id
+    topup_request.admin_id = admin_id
     topup_request.decided_at = datetime.now(timezone.utc)
     topup_request.admin_note = "درخواست توسط ادمین رد شد"
 
