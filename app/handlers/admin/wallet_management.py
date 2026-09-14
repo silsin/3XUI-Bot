@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from app.db.models import User, UserWallet, WalletTransaction
+from app.db.models import User, UserWallet, WalletTransaction, WalletTransactionType
 from app.filters import IsAdmin
 from app.keyboards import admin as kb
 from app.services.wallet_balance_service import WalletBalanceService
@@ -58,6 +58,10 @@ class AdminWalletCB:
     @staticmethod
     def search_user() -> str:
         return "wallet_action:search"
+    
+    @staticmethod
+    def add_bonus() -> str:
+        return "wallet_action:add_bonus"
 
 
 # ────────────────── منوی کیف پول ──────────────────
@@ -79,6 +83,7 @@ async def show_wallet_menu(call: CallbackQuery, session: AsyncSession) -> None:
     builder = InlineKeyboardBuilder()
     builder.button(text="🔍 جستجو کاربر", callback_data=AdminWalletCB.search_user())
     builder.button(text="📊 آمار کامل", callback_data=AdminWalletCB.stats())
+    builder.button(text="💝 افزودن بونوس", callback_data=AdminWalletCB.add_bonus())
     builder.button(text="❌ غیرفعال کردن همه", callback_data=AdminWalletCB.disable_all())
     builder.button(text="✅ فعال کردن همه", callback_data=AdminWalletCB.enable_all())
     builder.button(text="🏠 بازگشت", callback_data=kb.AdminCB(action="home").pack())
@@ -381,3 +386,125 @@ async def wallet_stats(call: CallbackQuery, session: AsyncSession) -> None:
     
     await call.message.edit_text(text, reply_markup=builder.as_markup())
     await call.answer()
+
+
+
+# ────────────────── افزودن بونوس/جشنواره ──────────────────
+
+
+@router.callback_query(F.data == AdminWalletCB.add_bonus())
+async def wallet_add_bonus_start(call: CallbackQuery, state: FSMContext) -> None:
+    """شروع افزودن بونوس به کیف پول."""
+    await state.set_state(AdminFlow.wallet_bonus_user)
+    await call.message.answer(
+        "<b>💝 افزودن بونوس/جشنواره به کیف پول</b>\n\n"
+        "شناسه کاربر (ID) یا نام کاربری (@username) را وارد کنید:"
+    )
+    await call.answer()
+
+
+@router.message(AdminFlow.wallet_bonus_user)
+async def wallet_bonus_user(
+    message: Message, session: AsyncSession, state: FSMContext
+) -> None:
+    """تعیین کاربر برای افزودن بونوس."""
+    query_str = message.text.strip()
+    
+    # جستجو بر اساس ID یا username
+    user = None
+    try:
+        user_id = int(query_str)
+        user = await session.get(User, user_id)
+    except ValueError:
+        # شاید username است
+        username = query_str.lstrip("@")
+        stmt = select(User).where(User.username == username)
+        user = await session.scalar(stmt)
+    
+    if not user:
+        await message.answer("❌ کاربری یافت نشد.")
+        return
+    
+    await state.update_data(bonus_user_id=user.id)
+    await state.set_state(AdminFlow.wallet_bonus_amount)
+    await message.answer(
+        f"کاربر: <b>{user.first_name or 'N/A'}</b> (ID: {user.id})\n\n"
+        "مبلغ بونوس را به تومان وارد کنید:"
+    )
+
+
+@router.message(AdminFlow.wallet_bonus_amount)
+async def wallet_bonus_amount(
+    message: Message, session: AsyncSession, state: FSMContext
+) -> None:
+    """تعیین مبلغ بونوس."""
+    try:
+        amount = int(message.text.strip())
+        if amount <= 0:
+            raise ValueError("مبلغ باید مثبت باشد")
+    except ValueError as e:
+        await message.answer(f"❌ خطا: {e}")
+        return
+    
+    await state.update_data(bonus_amount=amount)
+    await state.set_state(AdminFlow.wallet_bonus_reason)
+    await message.answer(
+        f"مبلغ: <b>{money(amount)}</b>\n\n"
+        "دلیل جشنواره/بونوس را وارد کنید (مثل: تخفیف ماه رمضان، جشنواره، کمپین تولید محتوا):"
+    )
+
+
+@router.message(AdminFlow.wallet_bonus_reason)
+async def wallet_bonus_reason(
+    message: Message, session: AsyncSession, state: FSMContext, admin: User
+) -> None:
+    """تأیید و اعمال بونوس."""
+    data = await state.get_data()
+    bonus_user_id = data.get("bonus_user_id")
+    bonus_amount = data.get("bonus_amount")
+    reason = message.text.strip()
+    
+    if not bonus_user_id or not bonus_amount:
+        await message.answer("❌ خطای داخلی - دوباره تلاش کنید.")
+        await state.clear()
+        return
+    
+    wallet_service = WalletBalanceService(session)
+    
+    try:
+        # افزودن بونوس به کیف پول
+        await wallet_service.deposit(
+            bonus_user_id,
+            bonus_amount,
+            transaction_type=WalletTransactionType.OFFER_BONUS,
+            admin_note=f"بونوس جشنواره: {reason}"
+        )
+        await session.commit()
+        
+        await state.clear()
+        await message.answer(
+            f"✅ <b>بونوس افزوده شد</b>\n\n"
+            f"کاربر: {bonus_user_id}\n"
+            f"مبلغ: {money(bonus_amount)}\n"
+            f"دلیل: {reason}"
+        )
+        
+        # اطلاع به کاربر
+        from aiogram import Bot
+        bot = message.bot
+        try:
+            await bot.send_message(
+                bonus_user_id,
+                f"🎉 <b>تبریک!</b>\n\n"
+                f"شما یک بونوس جشنواره دریافت کردید: <b>{money(bonus_amount)}</b> تومان\n"
+                f"دلیل: {reason}\n\n"
+                f"💳 این مبلغ به کیف پول شما اضافه شده است.",
+                disable_web_page_preview=True
+            )
+        except Exception as e:
+            logger.warning(f"Failed to notify user {bonus_user_id}: {e}")
+        
+    except Exception as e:
+        logger.exception(f"Failed to add bonus: {e}")
+        await message.answer(f"❌ خطا: {str(e)}")
+        await state.clear()

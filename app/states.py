@@ -29,6 +29,9 @@ class AdminFlow(StatesGroup):
     # مراحل مدیریت کیف پول
     wallet_search = State()
     wallet_set_balance = State()
+    wallet_bonus_user = State()
+    wallet_bonus_amount = State()
+    wallet_bonus_reason = State()
 
 
 class WalletTopupFlow(StatesGroup):
