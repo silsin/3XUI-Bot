@@ -784,7 +784,7 @@ async def channel_toggle(call: CallbackQuery, session: AsyncSession) -> None:
     
     current = await cfg.get(session, S_REQUIRED_CHANNEL_ENABLED, False)
     new_value = not current
-    await cfg.set(session, S_REQUIRED_CHANNEL_ENABLED, new_value)
+    await cfg.set_setting(session, S_REQUIRED_CHANNEL_ENABLED, new_value)
     
     status = "✅ فعال شد" if new_value else "❌ غیرفعال شد"
     await call.answer(status, show_alert=False)
@@ -809,7 +809,7 @@ async def channel_name_set(
     from app.texts import S_REQUIRED_CHANNEL_NAME
     
     channel_name = message.text.strip()
-    await cfg.set(session, S_REQUIRED_CHANNEL_NAME, channel_name)
+    await cfg.set_setting(session, S_REQUIRED_CHANNEL_NAME, channel_name)
     await state.clear()
     
     await message.answer(f"✅ نام کانال تنظیم شد: <b>{channel_name}</b>")
@@ -852,7 +852,7 @@ async def channel_id_set(
         # سعی کن تست کنی
         try:
             chat = await message.bot.get_chat(channel_id)
-            await cfg.set(session, S_REQUIRED_CHANNEL_ID, str(channel_id))
+            await cfg.set_setting(session, S_REQUIRED_CHANNEL_ID, str(channel_id))
             await state.clear()
             
             await message.answer(
