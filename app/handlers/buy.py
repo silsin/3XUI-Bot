@@ -6,6 +6,7 @@ import logging
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -124,6 +125,30 @@ async def _build_checkout_text(
 
 # ─────────────────────── ورود به جریان خرید ─────────────────────────
 
+@router.callback_query(F.data == "wallet_topup_checkout")
+async def wallet_topup_from_checkout(call: CallbackQuery, state: FSMContext) -> None:
+    """اطلاع کاربر که باید از پشتیبانی شارژ بخواهد."""
+    await state.clear()
+    
+    text = (
+        f"<b>💳 کیف پول ناکافی</b>\n\n"
+        f"موجودی کیف پول شما برای این خرید کافی نیست.\n\n"
+        f"برای شارژ کیف پول خود به پشتیبانی پیام دهید.\n"
+        f"پشتیبان ادمین مبلغ درخواستی را بررسی کرده و به کیف پول شما اضافه می‌کند.\n\n"
+        f"۱. روی دکمه <b>«پشتیبانی»</b> بزنید\n"
+        f"۲. مبلغ مورد نظر را درخواست کنید\n"
+        f"۳. منتظر تأیید مدیریت باشید\n"
+    )
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📞 تماس با پشتیبانی", url="https://t.me/YourSupportBot")
+    builder.button(text="🏠 بازگشت", callback_data="home")
+    builder.adjust(1)
+    
+    await call.message.edit_text(text, reply_markup=builder.as_markup())
+    await call.answer()
+
+
 @router.message(F.text == BTN_BUY)
 async def start_buy(message: Message, session: AsyncSession, state: FSMContext) -> None:
     await state.clear()
@@ -238,14 +263,18 @@ async def show_checkout(
     wallet_balance = await wallet_service.get_balance(user.id)
     wallet_enabled = await wallet_service.is_enabled(user.id)
     
+    # بررسی اینکه موجودی کافی است یا نه
+    insufficient_balance = wallet_enabled and wallet_balance < final_price
+    has_sufficient_balance = wallet_enabled and wallet_balance >= final_price
+    
     # اگر کیف پول فعال باشد، اطلاعات آن را نمایش بده
     if wallet_enabled:
         wallet_info = f"\n\n💳 <b>کیف پول شما:</b> {money(wallet_balance)}"
-        if wallet_balance >= final_price:
+        if has_sufficient_balance:
             wallet_info += f" ✅ (موجود برای این خرید)"
         else:
             shortage = final_price - wallet_balance
-            wallet_info += f" ⚠️ (کمبود: {money(shortage)})"
+            wallet_info += f" ⚠️ (کمبود: {money(shortage)})\n\n<i>برای شارژ کیف پول با پشتیبانی تماس بگیرید.</i>"
         text += wallet_info
     
     await call.message.edit_text(
@@ -255,7 +284,10 @@ async def show_checkout(
             callback_data.package_id,
             callback_data.service_id,
             offer_id=offer.id if offer else 0,
-            wallet_enabled=wallet_enabled and wallet_balance > 0,
+            wallet_enabled=wallet_enabled,
+            wallet_balance=wallet_balance,
+            final_amount=final_price,
+            insufficient_balance=insufficient_balance,
         ),
     )
     await call.answer()

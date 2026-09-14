@@ -31,6 +31,12 @@ class AdminFlow(StatesGroup):
     wallet_set_balance = State()
 
 
+class WalletTopupFlow(StatesGroup):
+    """جریان درخواست شارژ کیف پول."""
+    waiting_amount = State()       # کاربر مبلغ را انتخاب یا تایپ می‌کند
+    waiting_receipt = State()      # کاربر رسید را ارسال می‌کند
+
+
 class WalletFlow(StatesGroup):
     # ── مرحله ۱: انتخاب سرویس والد (از طریق inline keyboard)
     # (بدون state — مستقیم با callback شروع می‌شود)

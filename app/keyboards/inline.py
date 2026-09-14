@@ -114,10 +114,13 @@ def checkout_kb(
     service_id: int = 0,
     offer_id: int = 0,
     wallet_enabled: bool = False,
+    wallet_balance: int = 0,
+    final_amount: int = 0,
+    insufficient_balance: bool = False,
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     
-    # دکمه خرید عادی
+    # دکمه خرید عادی (روش‌های دیگر)
     builder.button(
         text=BTN_CONFIRM_BUY,
         callback_data=BuyCB(
@@ -131,8 +134,8 @@ def checkout_kb(
         style="success",
     )
     
-    # دکمه خرید از کیف پول (اگر فعال باشد)
-    if wallet_enabled:
+    # دکمه خرید از کیف پول (اگر فعال و موجودی کافی باشد)
+    if wallet_enabled and not insufficient_balance:
         builder.button(
             text="💳 خرید از کیف پول",
             callback_data=BuyCB(

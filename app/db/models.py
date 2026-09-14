@@ -405,3 +405,43 @@ class WalletTransaction(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
     wallet: Mapped["UserWallet"] = relationship(back_populates="transactions")
+
+
+class WalletTopupRequestStatus(str, enum.Enum):
+    """وضعیت درخواست شارژ کیف پول."""
+    AWAITING_RECEIPT = "awaiting_receipt"    # منتظر ارسال رسید
+    AWAITING_APPROVAL = "awaiting_approval"  # رسید ارسال‌شد، منتظر تایید ادمین
+    APPROVED = "approved"                    # تایید شده و به کیف پول اضافه شد
+    REJECTED = "rejected"                    # رد‌شده توسط ادمین
+    CANCELLED = "cancelled"                  # لغو‌شده توسط کاربر
+
+
+class WalletTopupRequest(Base):
+    """درخواست‌های شارژ کیف پول - منتظر تایید ادمین."""
+
+    __tablename__ = "wallet_topup_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+
+    amount: Mapped[int] = mapped_column(BigInteger)  # مبلغ درخواست‌شده (تومان)
+    status: Mapped[WalletTopupRequestStatus] = mapped_column(
+        Enum(WalletTopupRequestStatus), default=WalletTopupRequestStatus.AWAITING_RECEIPT, index=True
+    )
+
+    # رسید
+    receipt_file_id: Mapped[str | None] = mapped_column(String(256))
+    receipt_is_document: Mapped[bool] = mapped_column(Boolean, default=False)
+    # پیام‌های رسید ارسال‌شده به ادمین‌ها
+    notify_msgs: Mapped[str] = mapped_column(Text, default="")
+
+    # تصمیم ادمین
+    admin_id: Mapped[int | None] = mapped_column(BigInteger)
+    admin_note: Mapped[str | None] = mapped_column(Text)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped["User"] = relationship(viewonly=True)
