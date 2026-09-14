@@ -83,6 +83,11 @@ def wallet_menu_kb(has_balance: bool = False) -> inline.InlineKeyboardMarkup:
     """دکمه‌های منوی کیف پول."""
     builder = InlineKeyboardBuilder()
     
+    # دکمه‌های شارژ
+    builder.button(text="➕ شارژ 50,000 تومان", callback_data="wallet:topup:50000")
+    builder.button(text="➕ شارژ 100,000 تومان", callback_data="wallet:topup:100000")
+    builder.button(text="➕ شارژ 500,000 تومان", callback_data="wallet:topup:500000")
+    
     builder.button(
         text="📊 تاریخچه تراکنش‌ها",
         callback_data=WalletBalanceCB.history(0),
@@ -189,7 +194,7 @@ async def wallet_back(
     is_enabled = await wallet_service.is_enabled(user.id)
     
     if not is_enabled:
-        await call.message.edit_text(MSG_WALLET_DISABLED)
+        await call.message.edit_text(MSG_WALLET_DISABLED, reply_markup=reply.main_menu())
         await call.answer()
         return
     
@@ -208,3 +213,44 @@ async def wallet_back(
         text, reply_markup=wallet_menu_kb(balance > 0)
     )
     await call.answer()
+
+
+@router.callback_query(F.data.startswith("wallet:topup:"))
+async def wallet_topup(
+    call: CallbackQuery, session: AsyncSession, user: User
+) -> None:
+    """شارژ کیف پول."""
+    try:
+        amount_str = call.data.split(":")[2]
+        amount = int(amount_str)
+    except (ValueError, IndexError):
+        await call.answer("❌ مبلغ نامعتبر است", show_alert=True)
+        return
+    
+    wallet_service = WalletBalanceService(session)
+    
+    # بررسی فعال بودن
+    is_enabled = await wallet_service.is_enabled(user.id)
+    if not is_enabled:
+        await call.answer(MSG_WALLET_DISABLED, show_alert=True)
+        return
+    
+    # اضافه کردن موجودی
+    await wallet_service.deposit(user.id, amount, "تاپ‌آپ کاربری")
+    await session.commit()
+    
+    new_balance = await wallet_service.get_balance(user.id)
+    
+    text = (
+        f"<b>✅ شارژ موفق</b>\n\n"
+        f"مبلغ شارژ: {money(amount)} تومان\n"
+        f"موجودی جدید: <b>{money(new_balance)} تومان</b>\n"
+    )
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🏠 بازگشت", callback_data=WalletBalanceCB.back())
+    builder.adjust(1)
+    
+    await call.message.edit_text(text, reply_markup=builder.as_markup())
+    await call.answer("✅ شارژ با موفقیت انجام شد")
+    await activity.log_activity(session, user.id, "wallet_topup", {"amount": amount})
