@@ -27,6 +27,7 @@ from app.keyboards import inline
 from app.keyboards import reply
 from app.services import activity_service as activity
 from app.services import offers_service as offers
+from app.services import provisioning
 from app.services import settings_service as cfg
 from app.states import BuyFlow
 from app.texts import (
@@ -48,6 +49,7 @@ from app.texts import (
     S_BUY_INSTRUCTION,
     S_CARD_HOLDER,
     S_CARD_NUMBER,
+    S_REDEEM_INBOUND,
 )
 from app.utils.formatting import days_left_text, money, render, traffic
 
@@ -505,14 +507,27 @@ async def create_order(
 
     # اگر از کیف پول پرداخت شد، سفارش تایید شود
     if use_wallet:
-        from app.services.provisioning import add_service
-        success = await add_service(session, order)
-        if success:
+        try:
+            # دریافت inbound_id پیش‌فرض
+            default_inbound_id = await cfg.get_int(session, S_REDEEM_INBOUND, 1)
+            
+            service = await provisioning.create_service(
+                session,
+                user=user,
+                days=duration.days,
+                traffic_mb=final_traffic,
+                inbound_id=default_inbound_id,
+                title=f"{package.title} — {duration.title}",
+                device_limit=package.device_limit if hasattr(package, 'device_limit') else 0,
+                order=order,
+            )
+            
             text = (
                 f"✅ <b>خرید موفق!</b>\n\n"
                 f"سفارش #{order.id} تأیید شد.\n"
                 f"مبلغ پرداختی از کیف پول: {money(final_amount)} تومان\n\n"
-                f"سرویس شما فعال شد!"
+                f"سرویس شما فعال شد!\n"
+                f"🔑 نام کاربری: <code>{service.email}</code>"
             )
             try:
                 await call.message.edit_text(text, reply_markup=inline.done_kb())
@@ -522,23 +537,26 @@ async def create_order(
             
             await activity.log_activity(
                 session, user.id, "order_completed_wallet",
-                {"order_id": order.id, "amount": final_amount}
+                {"order_id": order.id, "amount": final_amount, "service_id": service.id}
             )
-        else:
+            
+        except Exception as e:
+            logger.exception("Failed to create service for wallet order %s: %s", order.id, e)
             text = (
                 f"⚠️ <b>خطا!</b>\n\n"
-                f"سفارش رسیده اما خطا در ساخت سرویس. لطفاً با پشتیبانی تماس بگیرید."
+                f"سفارش رسیده اما خطا در ساخت سرویس.\n"
+                f"خطا: {str(e)[:100]}\n\n"
+                f"لطفاً با پشتیبانی تماس بگیرید."
             )
             try:
                 await call.message.edit_text(
                     text,
                     reply_markup=reply.main_menu(get_settings().is_admin(user.id))
                 )
-            except Exception as e:
-                logger.exception("Failed to edit error message after wallet purchase: %s", e)
+            except Exception as ex:
+                logger.exception("Failed to edit error message after wallet purchase: %s", ex)
                 await call.message.answer(text, reply_markup=reply.main_menu(get_settings().is_admin(user.id)))
-            
-            logger.error("Failed to provision service for order %s", order.id)
+        
         await call.answer()
         return
 
