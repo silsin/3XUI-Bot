@@ -502,23 +502,36 @@ async def create_order(
         from app.services.provisioning import add_service
         success = await add_service(session, order)
         if success:
-            await call.message.edit_text(
+            text = (
                 f"✅ <b>خرید موفق!</b>\n\n"
                 f"سفارش #{order.id} تأیید شد.\n"
                 f"مبلغ پرداختی از کیف پول: {money(final_amount)} تومان\n\n"
-                f"سرویس شما فعال شد!",
-                reply_markup=inline.done_kb(),
+                f"سرویس شما فعال شد!"
             )
+            try:
+                await call.message.edit_text(text, reply_markup=inline.done_kb())
+            except Exception as e:
+                logger.exception("Failed to edit message after wallet purchase: %s", e)
+                await call.message.answer(text, reply_markup=inline.done_kb())
+            
             await activity.log_activity(
                 session, user.id, "order_completed_wallet",
                 {"order_id": order.id, "amount": final_amount}
             )
         else:
-            await call.message.edit_text(
+            text = (
                 f"⚠️ <b>خطا!</b>\n\n"
-                f"سفارش رسیده اما خطا در ساخت سرویس. لطفاً با پشتیبانی تماس بگیرید.",
-                reply_markup=reply.main_menu(get_settings().is_admin(user.id))
+                f"سفارش رسیده اما خطا در ساخت سرویس. لطفاً با پشتیبانی تماس بگیرید."
             )
+            try:
+                await call.message.edit_text(
+                    text,
+                    reply_markup=reply.main_menu(get_settings().is_admin(user.id))
+                )
+            except Exception as e:
+                logger.exception("Failed to edit error message after wallet purchase: %s", e)
+                await call.message.answer(text, reply_markup=reply.main_menu(get_settings().is_admin(user.id)))
+            
             logger.error("Failed to provision service for order %s", order.id)
         await call.answer()
         return
@@ -540,11 +553,20 @@ async def create_order(
     if bonus_traffic_mb > 0:
         instruction += f"\n🎁 حجم اضافه: <b>{traffic(bonus_traffic_mb)}</b>"
 
-    await call.message.edit_text(
-        instruction,
-        reply_markup=inline.payment_kb(order.id, card_number, final_amount),
-        disable_web_page_preview=True,
-    )
+    try:
+        await call.message.edit_text(
+            instruction,
+            reply_markup=inline.payment_kb(order.id, card_number, final_amount),
+            disable_web_page_preview=True,
+        )
+    except Exception as e:
+        logger.exception("Failed to edit message for payment instructions: %s", e)
+        await call.message.answer(
+            instruction,
+            reply_markup=inline.payment_kb(order.id, card_number, final_amount),
+            disable_web_page_preview=True,
+        )
+    
     await call.answer()
 
 
