@@ -168,11 +168,12 @@ async def renew_service(
     add_days: int,
     add_traffic_mb: int,
     title: str = "",
+    reset_traffic: bool = True,  # ← برای renewal، حجم را reset کن
 ) -> Service:
     """تمدید همه کلاینت‌های سرویس روی همان inboundها."""
     provider = get_provider()
     service = await _load_service(session, service.id) or service
-    reset = service.status is not ServiceStatus.ACTIVE
+    reset = service.status is not ServiceStatus.ACTIVE or reset_traffic
 
     for client in service.clients:
         try:
@@ -196,9 +197,7 @@ async def renew_service(
     service.expires_at = base + timedelta(days=add_days) if add_days > 0 else None
 
     if add_traffic_mb > 0:
-        service.traffic_mb = (
-            add_traffic_mb if reset else service.traffic_mb + add_traffic_mb
-        )
+        service.traffic_mb = add_traffic_mb  # ← حجم را reset کن (نه اضافه کن)
     service.status = ServiceStatus.ACTIVE
     service.expiry_notified = False
     if title:
