@@ -118,7 +118,7 @@ async def my_services(message: Message, session: AsyncSession, user: User) -> No
     if not active:
         await message.answer(
             "🔴 همه سرویس‌های شما منقضی شده‌اند.\n"
-            "برای تمدید از «♻️ تمدید سرویس» استفاده کنید."
+           
         )
         return
 
