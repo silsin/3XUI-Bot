@@ -171,10 +171,14 @@ async def check_membership(
                 reply_markup=reply.main_menu(False)
             )
             return
+        # کاربر عضو نیست
+        await call.answer(
+            "❌ هنوز عضو کانال نشده‌ایید. لطفاً ابتدا عضو شوید.",
+            show_alert=True
+        )
     except Exception as e:
         logger.warning(f"Failed to check membership: {e}")
-    
-    await call.answer(
-        "❌ هنوز عضو کانال نشده‌اید. لطفاً ابتدا عضو شوید.",
-        show_alert=True
-    )
+        await call.answer(
+            "⚠️ خطا در بررسی عضویت. مطمئن شوید ربات ادمین کانال است و دوباره سعی کنید.",
+            show_alert=True
+        )

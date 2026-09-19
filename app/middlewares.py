@@ -121,18 +121,27 @@ class ChannelMembershipMiddleware(BaseMiddleware):
             return await handler(event, data)
         
         # چک کن که کاربر عضو کانال است؟
+        is_member = False
         try:
             member = await data["bot"].get_chat_member(channel_id, user.id)
             # وضعیت‌های معتبر: member, creator, administrator, restricted
             if member.status in ["member", "creator", "administrator", "restricted"]:
                 # عضو است
-                return await handler(event, data)
+                is_member = True
         except Exception as e:
-            logger.warning(f"Failed to check channel membership for user {user.id}: {e}")
-            # اگر خطا شد، اجازه بدهید (بهتر از مسدود کردن)
+            logger.warning(
+                f"Failed to check channel membership for user {user.id}: {e}. "
+                f"Make sure the bot is an administrator of channel {channel_id}. "
+                f"Will show the join message and block the user."
+            )
+            # اگر نتوان عضویت را بررسی کنیم، فرض می‌کنیم عضو نیست
+            # و پیام عضویت را نمایش می‌دهیم (بهتر از رها کردن کاربر)
+            is_member = False
+        
+        if is_member:
             return await handler(event, data)
         
-        # کاربر عضو نیست - ذخیره کن و اطلاع بدهید
+        # کاربر عضو نیست (یا نتوان عضویت را بررسی کنیم) - پیام عضویت را نمایش بده
         data["channel_membership_required"] = True
         data["required_channel_id"] = channel_id
         
