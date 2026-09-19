@@ -44,12 +44,8 @@ _STATUS_LABEL = {
 
 
 def _is_expired(service: Service) -> bool:
-    """انقضا را بلادرنگ از روی تاریخ می‌سنجد (مستقل از همگام‌سازی زمان‌بند)."""
-    if service.status is ServiceStatus.EXPIRED:
-        return True
-    if service.expires_at is None:  # نامحدود
-        return False
-    return days_left(service.expires_at) == 0
+    """بررسی می‌کند که آیا سرویس منقضی است (فقط بر اساس status)."""
+    return service.status is ServiceStatus.EXPIRED
 
 
 def _effective_status(service: Service) -> ServiceStatus:
