@@ -268,6 +268,7 @@ async def wallet_topup_amount_selected(
     call: CallbackQuery, state: FSMContext, session: AsyncSession, user: User
 ) -> None:
     """انتخاب مبلغ از دکمه‌های از پیش تعریف‌شده."""
+    from aiogram.types import CopyTextButton
     
     try:
         amount = int(call.data.split(":")[2])
@@ -293,8 +294,34 @@ async def wallet_topup_amount_selected(
     )
     
     builder = InlineKeyboardBuilder()
+    
+    # دکمه‌های کپی
+    card_digits = "".join(ch for ch in card_number if ch.isdigit())
+    copy_row = 0
+    if card_digits:
+        builder.button(
+            text="📋 کپی شماره کارت",
+            copy_text=CopyTextButton(text=card_digits),
+            style="primary",
+        )
+        copy_row += 1
+    if amount:
+        builder.button(
+            text=f"💰 {money(amount)}",
+            copy_text=CopyTextButton(text=str(int(amount))),
+            style="primary",
+        )
+        copy_row += 1
+    
+    # دکمه‌های عملی
+    builder.button(text="📸 ارسال رسید", callback_data="wallet:send_receipt")
     builder.button(text="❌ لغو", callback_data="wallet:back")
-    builder.adjust(1)
+    
+    rows = []
+    if copy_row:
+        rows.append(copy_row)
+    rows += [1, 1]
+    builder.adjust(*rows)
     
     await call.message.edit_text(text, reply_markup=builder.as_markup())
     await call.answer()
@@ -316,6 +343,7 @@ async def wallet_topup_custom_amount(
     message: Message, state: FSMContext, session: AsyncSession, user: User
 ) -> None:
     """دریافت مبلغ دلخواه از کاربر."""
+    from aiogram.types import CopyTextButton
     
     try:
         amount = int(message.text.strip())
@@ -344,7 +372,37 @@ async def wallet_topup_custom_amount(
         f"پس از واریز، لطفاً تصویر رسید را ارسال کنید."
     )
     
-    await message.answer(text)
+    builder = InlineKeyboardBuilder()
+    
+    # دکمه‌های کپی
+    card_digits = "".join(ch for ch in card_number if ch.isdigit())
+    copy_row = 0
+    if card_digits:
+        builder.button(
+            text="📋 کپی شماره کارت",
+            copy_text=CopyTextButton(text=card_digits),
+            style="primary",
+        )
+        copy_row += 1
+    if amount:
+        builder.button(
+            text=f"💰 {money(amount)}",
+            copy_text=CopyTextButton(text=str(int(amount))),
+            style="primary",
+        )
+        copy_row += 1
+    
+    # دکمه‌های عملی
+    builder.button(text="📸 ارسال رسید", callback_data="wallet:send_receipt")
+    builder.button(text="❌ لغو", callback_data="wallet:back")
+    
+    rows = []
+    if copy_row:
+        rows.append(copy_row)
+    rows += [1, 1]
+    builder.adjust(*rows)
+    
+    await message.answer(text, reply_markup=builder.as_markup())
 
 
 @router.message(WalletTopupFlow.waiting_receipt, F.photo | F.document)
@@ -450,3 +508,13 @@ async def wallet_topup_receive_receipt(
 async def wallet_topup_receipt_invalid(message: Message) -> None:
     """پیام نامعتبر در مرحله ارسال رسید."""
     await message.answer("❌ لطفاً تصویر یا فایل رسید را ارسال کنید.")
+
+
+@router.callback_query(F.data == "wallet:send_receipt")
+async def wallet_send_receipt_start(call: CallbackQuery, state: FSMContext) -> None:
+    """شروع ارسال رسید پرداخت."""
+    await call.message.answer(
+        "📸 لطفاً <b>تصویر رسید پرداخت</b> را ارسال کنید.\n"
+        "می‌توانید عکس یا فایل بفرستید. برای انصراف /cancel را بزنید."
+    )
+    await call.answer()
