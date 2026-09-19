@@ -83,7 +83,8 @@ class UserMiddleware(BaseMiddleware):
 class ChannelMembershipMiddleware(BaseMiddleware):
     """چک می‌کند که کاربر عضو کانال الزامی است یا خیر.
     
-    اگر کانال الزامی فعال باشد و کاربر عضو نباشد، اجازه ندهید به handler برسند.
+    اگر کانال الزامی فعال باشد و کاربر عضو نباشد، پیام عضویت کانال را نشان داده
+    و اجازه نمی‌دهد به handler اصلی برسد.
     """
 
     async def __call__(
@@ -93,7 +94,8 @@ class ChannelMembershipMiddleware(BaseMiddleware):
         data: dict[str, Any],
     ) -> Any:
         from app.services import settings_service as cfg
-        
+        from app.handlers.common import show_channel_membership_required
+
         session = data.get("session")
         user = data.get("user")
         is_admin = data.get("is_admin", False)
@@ -102,8 +104,13 @@ class ChannelMembershipMiddleware(BaseMiddleware):
             # اگر admin است یا کاربر ثبت نشده، اجازه بدهید
             return await handler(event, data)
         
+        # اجازه بده برای دکمه "بررسی عضویت" — کاربر باید بتواند پس از عضویت
+        # وضعیت را با کلیک روی این دکمه چک کند
+        if isinstance(event, CallbackQuery) and event.data == "check_membership":
+            return await handler(event, data)
+        
         # چک کن که عضویت الزامی فعال است؟
-        channel_enabled = await cfg.get(session, S_REQUIRED_CHANNEL_ENABLED, False)
+        channel_enabled = await cfg.get_bool(session, S_REQUIRED_CHANNEL_ENABLED, False)
         if not channel_enabled:
             return await handler(event, data)
         
@@ -129,18 +136,16 @@ class ChannelMembershipMiddleware(BaseMiddleware):
         data["channel_membership_required"] = True
         data["required_channel_id"] = channel_id
         
-        # سعی کن پیام ارسال کن (اگر Message/CallbackQuery است)
+        # نمایش پیام عضویت با دکمه لینک کانال و دکمه بررسی عضویت
         try:
             if isinstance(event, Message):
-                await event.answer(
-                    "⚠️ ابتدا باید عضو کانال ما شوید.\n\n"
-                    "لطفاً بر روی دکمه زیر کلیک کنید و عضو شوید، سپس دوباره سعی کنید."
-                )
+                await show_channel_membership_required(event, session, channel_id)
             elif isinstance(event, CallbackQuery):
-                await event.answer(
-                    "⚠️ ابتدا باید عضو کانال ما شوید.",
-                    show_alert=True
-                )
+                await event.answer()  # حذف وضعیت loading
+                if event.message is not None:
+                    await show_channel_membership_required(
+                        event.message, session, channel_id
+                    )
         except Exception as e:
             logger.warning(f"Failed to send membership required message: {e}")
         

@@ -749,7 +749,7 @@ async def required_channel_menu(call: CallbackQuery, session: AsyncSession) -> N
     from app.texts import S_REQUIRED_CHANNEL_ENABLED, S_REQUIRED_CHANNEL_ID, S_REQUIRED_CHANNEL_NAME
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     
-    enabled = await cfg.get(session, S_REQUIRED_CHANNEL_ENABLED, False)
+    enabled = await cfg.get_bool(session, S_REQUIRED_CHANNEL_ENABLED, False)
     channel_id = await cfg.get(session, S_REQUIRED_CHANNEL_ID, None)
     channel_name = await cfg.get(session, S_REQUIRED_CHANNEL_NAME, "کانال")
     
@@ -779,12 +779,12 @@ async def required_channel_menu(call: CallbackQuery, session: AsyncSession) -> N
 
 @router.callback_query(F.data == "channel_toggle")
 async def channel_toggle(call: CallbackQuery, session: AsyncSession) -> None:
-    """فعال/غیرفعال کردن کانال الزامی."""
+    """فعال/غیرفععال کردن کانال الزامی."""
     from app.texts import S_REQUIRED_CHANNEL_ENABLED
     
-    current = await cfg.get(session, S_REQUIRED_CHANNEL_ENABLED, False)
+    current = await cfg.get_bool(session, S_REQUIRED_CHANNEL_ENABLED, False)
     new_value = not current
-    await cfg.set_setting(session, S_REQUIRED_CHANNEL_ENABLED, new_value)
+    await cfg.set_setting(session, S_REQUIRED_CHANNEL_ENABLED, "1" if new_value else "0")
     
     status = "✅ فعال شد" if new_value else "❌ غیرفعال شد"
     await call.answer(status, show_alert=False)
