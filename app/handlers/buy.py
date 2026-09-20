@@ -168,7 +168,7 @@ async def start_renew(message: Message, session: AsyncSession, user: User) -> No
         (
             await session.execute(
                 select(Service)
-                .where(Service.user_id == user.id)
+                .where(Service.user_id == user.id, Service.is_trial == False)  # ← فقط سرویس‌های پولی
                 .order_by(Service.created_at.desc())
             )
         ).scalars().all()

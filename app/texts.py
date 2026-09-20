@@ -183,7 +183,7 @@ BTN_CONFIRM_BUY = "✅ تأیید و پرداخت"
 BTN_SEND_RECEIPT = "📸 ارسال رسید"
 BTN_APPROVE = "✅ تأیید"
 BTN_REJECT = "❌ رد"
-BTN_ENTER_PROMO = "🏷 دارم کد تخفیف"
+BTN_ENTER_PROMO = "🏷 کد تخفیف دارم"
 BTN_REMOVE_PROMO = "✖️ حذف تخفیف"
 
 # ---------- کیف داده (split & transfer) ----------
