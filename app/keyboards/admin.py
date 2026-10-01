@@ -26,6 +26,7 @@ def home() -> InlineKeyboardMarkup:
     b.button(text="🎁 تنظیمات تست رایگان", callback_data=AdminCB(action="trial"))
     b.button(text="🏅 تنظیمات امتیاز", callback_data=AdminCB(action="points"))
     b.button(text="🧩 اینباندهای کانفیگ", callback_data=AdminCB(action="multi"))
+    b.button(text="🛰 پنل‌ها و اینباندها", callback_data=AdminCB(action="panels"))
     b.button(text="🏷 تخفیف‌ها و پیشنهادها", callback_data=AdminCB(action="offers"))
     b.button(text="🔐 تنظیمات کانال الزامی", callback_data="setting:required_channel")
     b.button(text="💰 مدیریت کیف پول", callback_data="wallet_menu:home")
@@ -213,4 +214,198 @@ def offer_detail_kb(offer) -> InlineKeyboardMarkup:
     )
     b.adjust(2)
     b.row(_back("offers"))
+
+# ---------- پنل‌ها و اینباندها ----------
+
+
+def panels_list(panels: list) -> InlineKeyboardMarkup:
+    """فهرست پنل‌ها."""
+    b = InlineKeyboardBuilder()
+    for p in panels:
+        state = "🟢" if p.is_active else "⚪️"
+        b.button(
+            text=f"{state} {p.title}",
+            callback_data=AdminCB(action="panel_view", arg=p.id),
+        )
+    if panels:
+        b.adjust(1)
+    b.button(text="➕ افزودن پنل", callback_data=AdminCB(action="panel_new"))
+    b.button(text="🔄 از .env", callback_data=AdminCB(action="panel_seed"))
+    b.row(_back("home"))
+    return b.as_markup()
+
+
+def panel_view(panel_id: int) -> InlineKeyboardMarkup:
+    """مدیریت یک پنل."""
+    b = InlineKeyboardBuilder()
+    b.button(
+        text="🛰 اینباندهای این پنل",
+        callback_data=AdminCB(action="inb_list", arg=panel_id),
+    )
+    b.button(
+        text="🛠 ساخت اینباند",
+        callback_data=AdminCB(action="inb_add", arg=panel_id),
+    )
+    b.button(
+        text="🔌 تست اتصال",
+        callback_data=AdminCB(action="panel_test", arg=panel_id),
+    )
+    b.button(
+        text="✏️ ویرایش مشخصات",
+        callback_data=AdminCB(action="panel_edit_menu", arg=panel_id),
+    )
+    b.button(
+        text="🔁 تازه‌سازی کش",
+        callback_data=AdminCB(action="panel_refresh", arg=panel_id),
+    )
+    b.button(
+        text="⚪️/🟢 فعال‌سازی",
+        callback_data=AdminCB(action="panel_toggle", arg=panel_id),
+    )
+    b.button(
+        text="🗑 حذف پنل",
+        callback_data=AdminCB(action="panel_del_confirm", arg=panel_id),
+    )
+    b.adjust(2)
+    b.row(_back("panels"))
+    return b.as_markup()
+
+
+def panel_edit_fields(panel_id: int) -> InlineKeyboardMarkup:
+    """فیلدهای قابل ویرایش پنل."""
+    fields = [
+        ("title", "🏷 عنوان"),
+        ("base_url", "🌐 آدرس"),
+        ("web_base_path", "🧭 مسیر پایه"),
+        ("api_token", "🔑 توکن"),
+        ("username", "👤 نام کاربری"),
+        ("password", "🔒 گذرواژه"),
+        ("node_host", "📍 هاست لینک"),
+        ("sub_base_url", "🔗 آدرس اشتراک"),
+        ("variant", "🧬 نوع پنل"),
+    ]
+    b = InlineKeyboardBuilder()
+    for key, label in fields:
+        b.button(
+            text=label,
+            callback_data=AdminCB(action="panel_edit_field", arg=panel_id, field=key),
+        )
+    b.adjust(2)
+    b.row(_back("panel_view", panel_id))
+    return b.as_markup()
+
+
+def variant_choose() -> InlineKeyboardMarkup:
+    """انتخاب نوع پنل هنگام ساخت."""
+    from app.services.panel_service import VARIANTS
+
+    b = InlineKeyboardBuilder()
+    for value, label in VARIANTS.items():
+        b.button(
+            text=label,
+            callback_data=AdminCB(action="panel_new_variant", field=value),
+        )
+    b.adjust(1)
+    b.row(_back("panels"))
+    return b.as_markup()
+
+
+def inbounds_list(panel_id: int, rows: list) -> InlineKeyboardMarkup:
+    """فهرست اینباندهای ثبت‌شده یک پنل."""
+    b = InlineKeyboardBuilder()
+    for r in rows:
+        state = "🟢" if r.is_active else "⚪️"
+        label = r.remark or f"#{r.inbound_id}"
+        b.button(
+            text=f"{state} {label} ({r.protocol} :{r.port})",
+            callback_data=AdminCB(action="inb_view", arg=r.id),
+        )
+    if rows:
+        b.adjust(1)
+    b.button(
+        text="➕ از پنل بخوان",
+        callback_data=AdminCB(action="inb_fetch", arg=panel_id),
+    )
+    b.button(
+        text="🛠 ساخت اینباند",
+        callback_data=AdminCB(action="inb_add", arg=panel_id),
+    )
+    b.row(_back("panel_view", panel_id))
+    return b.as_markup()
+
+
+def inbound_view(row_id: int, panel_id: int) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(
+        text="🔁 تازه‌سازی اطلاعات",
+        callback_data=AdminCB(action="inb_sync", arg=row_id),
+    )
+    b.button(
+        text="🔀 تغییر وضعیت",
+        callback_data=AdminCB(action="inb_toggle", arg=row_id),
+    )
+    b.button(
+        text="🗑 فقط از ربات",
+        callback_data=AdminCB(action="inb_unreg_confirm", arg=row_id),
+    )
+    b.button(
+        text="🗑 از پنل هم حذف کن",
+        callback_data=AdminCB(action="inb_del_confirm", arg=row_id),
+    )
+    b.adjust(2)
+    b.row(_back("inb_list", panel_id))
+    return b.as_markup()
+
+
+def confirm(text: str, yes_action: str, arg: int, back_action: str) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(
+        text="بله، حذف شود",
+        callback_data=AdminCB(action=yes_action, arg=arg).pack(),
+    )
+    b.button(
+        text="انصراف",
+        callback_data=AdminCB(action=back_action, arg=arg).pack(),
+    )
+    b.adjust(2)
+    return b.as_markup()
+
+
+def inbound_protocol_choose(panel_id: int) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    for proto in ("vless", "vmess", "trojan", "shadowsocks"):
+        b.button(
+            text=proto,
+            callback_data=AdminCB(
+                action="inb_proto", arg=panel_id, field=proto
+            ),
+        )
+    b.adjust(2)
+    b.row(_back("inb_list", panel_id))
+    return b.as_markup()
+
+
+def inbound_network_choose(panel_id: int) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    for net in ("tcp", "ws", "grpc", "xhttp"):
+        b.button(
+            text=net,
+            callback_data=AdminCB(action="inb_net", arg=panel_id, field=net),
+        )
+    b.adjust(2)
+    b.row(_back("inb_list", panel_id))
+    return b.as_markup()
+
+
+def inbound_security_choose(panel_id: int) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    for sec in ("none", "tls", "reality"):
+        b.button(
+            text=sec,
+            callback_data=AdminCB(action="inb_sec", arg=panel_id, field=sec),
+        )
+    b.adjust(3)
+    b.row(_back("inb_list", panel_id))
+    return b.as_markup()
+
     return b.as_markup()

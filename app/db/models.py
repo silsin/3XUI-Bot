@@ -444,4 +444,58 @@ class WalletTopupRequest(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+
+class Panel(Base):
+    """یک پنل VPN متصل‌شده به ربات (از رابط ادمین ساخته می‌شود)."""
+
+    __tablename__ = "panels"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(64), default="پنل")
+    variant: Mapped[str] = mapped_column(String(16), default="xui3")
+
+    base_url: Mapped[str] = mapped_column(String(256))
+    web_base_path: Mapped[str] = mapped_column(String(128), default="")
+    # توکن Bearer برای xui3؛ برای نسخه‌های کلاسیک کاربر/رمز استفاده می‌شود
+    api_token: Mapped[str] = mapped_column(String(256), default="")
+    username: Mapped[str] = mapped_column(String(128), default="")
+    password: Mapped[str] = mapped_column(String(128), default="")
+    node_host: Mapped[str] = mapped_column(String(256), default="")
+    sub_base_url: Mapped[str] = mapped_column(String(256), default="")
+    verify_ssl: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    inbounds: Mapped[list["PanelInbound"]] = relationship(
+        back_populates="panel", cascade="all, delete-orphan"
+    )
+
+
+class PanelInbound(Base):
+    """یک inbound ثبت‌شده روی یک پنل؛ انتخاب‌یا ساخته‌شده از رابط ادمین."""
+
+    __tablename__ = "panel_inbounds"
+    __table_args__ = (
+        UniqueConstraint("panel_id", "inbound_id", name="uq_panel_inbound"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    panel_id: Mapped[int] = mapped_column(
+        ForeignKey("panels.id", ondelete="CASCADE"), index=True
+    )
+    inbound_id: Mapped[int] = mapped_column(Integer)
+
+    remark: Mapped[str] = mapped_column(String(128), default="")
+    protocol: Mapped[str] = mapped_column(String(32), default="")
+    port: Mapped[int] = mapped_column(Integer, default=0)
+    network: Mapped[str] = mapped_column(String(32), default="")
+    security: Mapped[str] = mapped_column(String(32), default="")
+
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    panel: Mapped[Panel] = relationship(back_populates="inbounds")
     user: Mapped["User"] = relationship(viewonly=True)

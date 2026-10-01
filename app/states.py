@@ -34,6 +34,24 @@ class AdminFlow(StatesGroup):
     wallet_bonus_reason = State()
     channel_name = State()
     channel_id = State()
+    # مراحل ساخت پنل جدید
+    panel_title = State()
+    panel_variant = State()
+    panel_url = State()
+    panel_path = State()
+    panel_token = State()
+    panel_user = State()
+    panel_pass = State()
+    panel_host = State()
+    # ویرایش فیلد پنل
+    panel_field = State()
+    # مراحل ساخت اینباند جدید
+    inbound_protocol = State()
+    inbound_port = State()
+    inbound_remark = State()
+    inbound_network = State()
+    inbound_security = State()
+    inbound_extra = State()
 
 
 class WalletTopupFlow(StatesGroup):

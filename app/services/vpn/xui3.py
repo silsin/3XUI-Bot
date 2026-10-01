@@ -91,6 +91,135 @@ class Xui3Client:
     async def list_inbounds(self) -> list[dict]:
         return await self._request("GET", "/panel/api/inbounds/list") or []
 
+    async def list_inbound_options(self) -> list[dict]:
+        """پروژکشن سبک برای انتخاب اینباند (id/remark/protocol/port/...)."""
+        return await self._request("GET", "/panel/api/inbounds/options") or []
+
+    async def get_inbound_info(self, inbound_id: int) -> dict:
+        """جزئیات یک اینباند + شبکه/امنیت استخراج‌شده از streamSettings."""
+        inbound = await self._request(
+            "GET", f"/panel/api/inbounds/get/{inbound_id}"
+        )
+        if not inbound:
+            raise VpnError(f"inbound {inbound_id} یافت نشد")
+        stream = inbound.get("streamSettings") or {}
+        if isinstance(stream, str):
+            stream = {}
+        info = dict(inbound)
+        info["network"] = stream.get("network") or ""
+        info["security"] = stream.get("security") or ""
+        return info
+
+    async def create_inbound(self, spec: dict) -> int:
+        """اینباند جدید روی پنل می‌سازد و شماره آن را برمی‌گرداند.
+
+        spec: {"protocol", "port", "remark", "network", "security", ...}
+        """
+        protocol = str(spec.get("protocol") or "vless").lower()
+        network = str(spec.get("network") or "tcp").lower()
+        security = str(spec.get("security") or "none").lower()
+        port = int(spec.get("port") or 0)
+        if port <= 0:
+            raise VpnError("پورت اینباند الزامی است")
+
+        settings = self._default_inbound_settings(protocol, security)
+        stream = self._default_stream(network, security, spec)
+
+        body = {
+            "enable": True,
+            "remark": str(spec.get("remark") or f"{protocol}-{port}"),
+            "listen": "",
+            "port": port,
+            "protocol": protocol,
+            "expiryTime": 0,
+            "total": 0,
+            "settings": settings,
+            "streamSettings": stream,
+            "sniffing": {"enabled": False},
+        }
+        await self._request("POST", "/panel/api/inbounds/add", json_body=body)
+
+        # شماره ساخته‌شده را از لیست می‌گیریم
+        for item in await self.list_inbound_options():
+            if int(item.get("port") or 0) == port and item.get("protocol") == protocol:
+                return int(item["id"])
+        raise VpnError("اینباند ساخته شد ولی شناسه‌اش پیدا نشد")
+
+    def _default_inbound_settings(self, protocol: str, security: str) -> dict:
+        if protocol == "vmess":
+            return {"clients": [], "disableInsecureEncryption": False, "decryption": "none"}
+        if protocol == "vless":
+            return {
+                "clients": [],
+                "decryption": "none",
+                "fallbacks": [],
+            }
+        if protocol == "trojan":
+            return {"clients": [], "fallbacks": []}
+        if protocol == "shadowsocks":
+            return {"clients": [], "method": "aes-256-gcm", "network": "tcp,udp"}
+        raise VpnError(f"پروتکل پشتیبانی نمی‌شود: {protocol}")
+
+    def _default_stream(self, network: str, security: str, spec: dict) -> dict:
+        stream: dict[str, Any] = {
+            "network": network,
+            "security": security,
+            "externalProxy": [],
+        }
+        if network == "ws":
+            stream["wsSettings"] = {
+                "path": str(spec.get("path") or "/"),
+                "headers": {},
+                "acceptProxyProtocol": False,
+            }
+        elif network == "grpc":
+            stream["grpcSettings"] = {
+                "serviceName": str(spec.get("service_name") or ""),
+                "multiMode": False,
+            }
+        elif network == "xhttp":
+            stream["xhttpSettings"] = {
+                "path": str(spec.get("path") or "/"),
+                "mode": "auto",
+            }
+        else:
+            stream["tcpSettings"] = {"header": {"type": "none"}}
+
+        if security in {"tls", "xtls"}:
+            stream["tlsSettings"] = {
+                "serverName": str(spec.get("sni") or ""),
+                "alpn": [],
+                "fingerprint": "chrome",
+                "allowInsecure": False,
+            }
+        elif security == "reality":
+            dest = str(spec.get("dest") or "").strip()
+            server_names = str(spec.get("server_names") or "").strip()
+            if not dest or not server_names:
+                raise VpnError(
+                    "Reality به dest و serverNames نیاز دارد (مثلاً "
+                    "www.microsoft.com:443 و www.microsoft.com)"
+                )
+            stream["realitySettings"] = {
+                "show": False,
+                "dest": dest,
+                "xver": 0,
+                "serverNames": [s.strip() for s in server_names.split(",") if s.strip()],
+                "shortIds": [""],
+                "settings": {
+                    "publicKey": "",
+                    "fingerprint": "chrome",
+                    "mldsa65": "",
+                },
+            }
+        return stream
+
+    async def delete_inbound(self, inbound_id: int) -> None:
+        """اینباند و همه کلاینت‌هایش را از پنل حذف می‌کند."""
+        await self._request(
+            "POST", f"/panel/api/inbounds/del/{inbound_id}", json_body={}
+        )
+
     async def ping(self) -> bool:
         """تست اتصال پنل از بخش ادمین."""
         await self.list_inbounds()

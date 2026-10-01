@@ -42,6 +42,13 @@ async def main() -> None:
     await init_db()
     async with get_sessionmaker()() as session:
         await cfg.seed_defaults(session)
+        # از تک‌پنل (.env) به چندپنل: پنل فعلی را در دیتابیس ثبت می‌کند
+        try:
+            from app.services import panel_service
+
+            await panel_service.ensure_default_from_env(session)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("panel seed skipped: %s", exc)
 
     bot = Bot(
         token=settings.bot_token,

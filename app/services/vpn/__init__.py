@@ -1,4 +1,4 @@
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.services.vpn.base import ProvisionResult, UsageInfo, VpnError, VpnProvider
 from app.services.vpn.xui import XuiClient
 from app.services.vpn.xui3 import Xui3Client
@@ -14,12 +14,17 @@ _V3_VARIANTS = {"xui3", "v3", "3.8", "3x", "mhsanaei3"}
 
 
 def _build_provider() -> VpnProvider:
-    variant = get_settings().xui_variant.strip().lower()
+    return build_provider_for(get_settings())
+
+
+def build_provider_for(settings: Settings) -> VpnProvider:
+    """یک کلاینت پنل از روی Settings دلخواه می‌سازد (برای چندپنل)."""
+    variant = settings.xui_variant.strip().lower()
     if variant in _V3_VARIANTS:
-        return Xui3Client()
+        return Xui3Client(settings)
     if variant in _LEGACY_VARIANTS:
-        return XuiLegacyClient()
-    return XuiClient()
+        return XuiLegacyClient(settings)
+    return XuiClient(settings)
 
 
 def get_provider() -> VpnProvider:
