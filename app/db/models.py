@@ -444,6 +444,8 @@ class WalletTopupRequest(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    user: Mapped["User"] = relationship(viewonly=True)
+
 
 class Panel(Base):
     """یک پنل VPN متصل‌شده به ربات (از رابط ادمین ساخته می‌شود)."""
@@ -498,4 +500,3 @@ class PanelInbound(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     panel: Mapped[Panel] = relationship(back_populates="inbounds")
-    user: Mapped["User"] = relationship(viewonly=True)
