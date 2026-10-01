@@ -78,6 +78,12 @@ class VpnProvider(Protocol):
 
     async def get_all_usage(self) -> dict[str, UsageInfo]: ...
 
+    async def build_client_link(
+        self, inbound_id: int, client_uuid: str, email: str
+    ) -> str:
+        """لینک اتصال کلاینت موجود را بدون ساخت مجدد برمی‌گرداند."""
+        ...
+
     async def delete_client(self, inbound_id: int, client_uuid: str) -> None: ...
 
     async def set_enabled(

@@ -36,6 +36,18 @@ class Settings(BaseSettings):
     xui_node_host: str = Field(default="", alias="XUI_NODE_HOST")
     xui_sub_base_url: str = Field(default="", alias="XUI_SUB_BASE_URL")
     xui_verify_ssl: bool = Field(default=False, alias="XUI_VERIFY_SSL")
+    # 3x-ui v3 (3.8.x) با توکن Bearer کار می‌کند؛ نام کاربری/رمز لازم نیست
+    xui_api_token: str = Field(default="", alias="XUI_API_TOKEN")
+
+    # پنل دوم VPN (برای پشتیبانی از چند پنل)
+    xui2_enabled: bool = Field(default=False, alias="XUI2_ENABLED")
+    xui2_base_url: str = Field(default="", alias="XUI2_BASE_URL")
+    xui2_web_base_path: str = Field(default="", alias="XUI2_WEB_BASE_PATH")
+    xui2_username: str = Field(default="", alias="XUI2_USERNAME")
+    xui2_password: str = Field(default="", alias="XUI2_PASSWORD")
+    xui2_node_host: str = Field(default="", alias="XUI2_NODE_HOST")
+    xui2_sub_base_url: str = Field(default="", alias="XUI2_SUB_BASE_URL")
+    xui2_verify_ssl: bool = Field(default=False, alias="XUI2_VERIFY_SSL")
 
     # سرور اشتراک داخلی ربات (base64 همه کانفیگ‌های یک سرویس)
     sub_port: int = Field(default=8080, alias="SUB_PORT")

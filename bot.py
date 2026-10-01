@@ -60,6 +60,14 @@ async def main() -> None:
     scheduler = setup_scheduler(bot, settings.timezone)
     scheduler.start()
 
+    # اطمینان از اینکه share address تنظیم شده تا لینک‌ها host خالی نداشته باشند
+    try:
+        from app.services.vpn import get_provider
+
+        await get_provider().ensure_share_addr()  # type: ignore[attr-defined]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("share address check skipped: %s", exc)
+
     web_runner = None
     if settings.sub_public_url:
         import os
