@@ -50,9 +50,6 @@ async def main() -> None:
                 return 1
             pid = panel.id
 
-            async with session.begin():
-                pass
-
             # اگر قبلاً seed شده بود هم بگیریمش
             panel = await ps.get_panel(session, pid)
             print(f"   id={panel.id} title={panel.title!r} variant={panel.variant!r}")
