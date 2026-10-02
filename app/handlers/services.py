@@ -271,7 +271,8 @@ async def regen_config(
     """بازسازی کانفیگ‌ها از تنظیمات پنل."""
     service = await session.get(Service, callback_data.service_id)
     if service is None or service.user_id != user.id:
-        await call.answer("سرویس یافت نشد.", show_alert=True)
+        await call.message.edit_text("❌ سرویس یافت نشد.")
+        await call.answer()
         return
     
     # Check clients
@@ -282,32 +283,45 @@ async def regen_config(
     clients = clients_result.scalars().all()
     
     if not clients:
-        await call.answer("⚠️ این سرویس کلاینتی ندارد.", show_alert=True)
+        await call.message.edit_text(
+            f"⚠️ سرویس «{service.title}» کلاینتی ندارد.\n\n"
+            f"شناسه: {service.id}\n"
+            f"ایمیل: {service.email or 'ندارد'}"
+        )
+        await call.answer()
         return
-    
-    await call.answer("🔄 در حال بازسازی کانفیگ‌ها...")
     
     try:
         # بازسازی لینک‌ها از پنل
         count = await provisioning.regenerate_links(session, service.id)
         await session.refresh(service)
         
-        logger.info("regenerated %d configs for service %s", count, service.id)
-        await call.answer(f"✅ {count} کانفیگ بازسازی شد.")
+        # Get updated clients
+        clients_result = await session.execute(
+            select(ServiceClient).where(ServiceClient.service_id == service.id)
+        )
+        clients = clients_result.scalars().all()
         
-        # نمایش دوباره جزئیات سرویس
-        try:
-            await call.message.edit_text(
-                _detail_text(service),
-                reply_markup=inline.service_detail_kb(service),
-                disable_web_page_preview=True,
-            )
-        except Exception:
-            pass
+        # Show results with updated config links
+        text = (
+            f"✅ <b>کانفیگ‌ها بازسازی شدند</b>\n\n"
+            f"سرویس: {service.title}\n"
+            f"تعداد کانفیگ: {len(clients)}\n\n"
+        )
+        
+        for i, client in enumerate(clients, 1):
+            text += f"{i}. {client.label or client.protocol}\n"
+            text += f"<code>{client.config_link[:50]}...</code>\n\n"
+        
+        text += "برای مشاهده کامل، به صفحه سرویس بروید."
+        
+        await call.message.edit_text(text, disable_web_page_preview=True)
+        await call.answer()
         
     except Exception as e:
         logger.exception("regen_config failed")
-        await call.answer(f"❌ خطا: {str(e)[:50]}", show_alert=True)
+        await call.message.edit_text(f"❌ خطا در بازسازی کانفیگ:\n{str(e)[:200]}")
+        await call.answer()
 
 
 @router.callback_query(inline.ServiceCB.filter(F.action == "wallet"))
