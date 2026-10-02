@@ -296,27 +296,21 @@ async def regen_config(
         count = await provisioning.regenerate_links(session, service.id)
         await session.refresh(service)
         
-        # Get updated clients
-        clients_result = await session.execute(
-            select(ServiceClient).where(ServiceClient.service_id == service.id)
-        )
-        clients = clients_result.scalars().all()
-        
-        # Show results with updated config links
+        # نمایش پیام موفقیت و برگشت به صفحه سرویس
+        service = await _get_service(session, service.id)
         text = (
             f"✅ <b>کانفیگ‌ها بازسازی شدند</b>\n\n"
             f"سرویس: {service.title}\n"
-            f"تعداد کانفیگ: {len(clients)}\n\n"
+            f"تعداد کانفیگ ساخته/آپدیت شده: {count}\n\n"
+            f"برای دریافت کانفیگ‌ها روی دکمه‌های زیر بزنید."
         )
         
-        for i, client in enumerate(clients, 1):
-            text += f"{i}. {client.label or client.protocol}\n"
-            text += f"<code>{client.config_link[:50]}...</code>\n\n"
-        
-        text += "برای مشاهده کامل، به صفحه سرویس بروید."
-        
-        await call.message.edit_text(text, disable_web_page_preview=True)
-        await call.answer()
+        await call.message.edit_text(
+            text,
+            reply_markup=inline.service_detail_kb(service),
+            disable_web_page_preview=True,
+        )
+        await call.answer("✅ کانفیگ‌ها بازسازی شدند")
         
     except Exception as e:
         logger.exception("regen_config failed")
