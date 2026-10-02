@@ -401,6 +401,41 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
             )
             logger.info("Built link for client %d: %s...", c.id, link[:60] if link else "None")
         except VpnError as exc:
+            # If client doesn't exist on panel, create it first
+            if "record not found" in str(exc).lower() or "obtain" in str(exc).lower():
+                logger.info("Client %d not found on panel, creating it...", c.id)
+                try:
+                    # Get service info to recreate client
+                    service = await session.get(Service, c.service_id)
+                    if service:
+                        # Calculate remaining days
+                        from datetime import datetime, timezone
+                        now = datetime.now(timezone.utc)
+                        remaining_days = 0
+                        if service.expires_at:
+                            exp = service.expires_at
+                            if exp.tzinfo is None:
+                                exp = exp.replace(tzinfo=timezone.utc)
+                            remaining_days = max(0, (exp - now).days)
+                        
+                        # Create client on panel
+                        result = await provider.create_client(
+                            inbound_id=c.inbound_id,
+                            email=c.email,
+                            days=remaining_days,
+                            traffic_mb=service.traffic_mb,
+                            device_limit=1,
+                            telegram_id=service.user_id,
+                            sub_id=service.sub_id,
+                        )
+                        # Update ServiceClient with new info from panel
+                        c.client_uuid = result.uuid
+                        c.config_link = result.config_link
+                        changed += 1
+                        logger.info("Created client %d on panel, new link: %s...", c.id, result.config_link[:60] if result.config_link else "None")
+                        continue
+                except VpnError as create_exc:
+                    logger.warning("Failed to create client %d on panel: %s", c.id, create_exc)
             logger.warning("Failed to build link for client %d (%s): %s", 
                           c.id, c.email[:30] if c.email else "None", exc)
             continue
