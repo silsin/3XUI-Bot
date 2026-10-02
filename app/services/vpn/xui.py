@@ -139,6 +139,24 @@ class XuiClient:
         payload = await self._request("GET", "/panel/api/inbounds/list")
         return payload.get("obj") or []
 
+    async def list_inbound_options(self) -> list[dict]:
+        """پروژکشن سبک برای فهرست اینباند (بدون نیاز به endpoint جداگانه)."""
+        raw = await self.list_inbounds() or []
+        out: list[dict] = []
+        for item in raw:
+            stream = _loads(item.get("streamSettings"))
+            out.append(
+                {
+                    "id": int(item.get("id") or 0),
+                    "remark": str(item.get("remark") or ""),
+                    "protocol": str(item.get("protocol") or ""),
+                    "port": int(item.get("port") or 0),
+                    "network": stream.get("network") or "",
+                    "security": stream.get("security") or "",
+                }
+            )
+        return out
+
     async def ping(self) -> bool:
         """برای تست اتصال از پنل ادمین."""
         await self.login()

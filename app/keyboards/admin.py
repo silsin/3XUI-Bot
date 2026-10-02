@@ -235,17 +235,20 @@ def panels_list(panels: list) -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
-def panel_view(panel_id: int) -> InlineKeyboardMarkup:
+def panel_view(
+    panel_id: int, variant: str = "xui3", can_manage: bool = True
+) -> InlineKeyboardMarkup:
     """مدیریت یک پنل."""
     b = InlineKeyboardBuilder()
     b.button(
         text="🛰 اینباندهای این پنل",
         callback_data=AdminCB(action="inb_list", arg=panel_id),
     )
-    b.button(
-        text="🛠 ساخت اینباند",
-        callback_data=AdminCB(action="inb_add", arg=panel_id),
-    )
+    if can_manage:
+        b.button(
+            text="🛠 ساخت اینباند",
+            callback_data=AdminCB(action="inb_add", arg=panel_id),
+        )
     b.button(
         text="🔌 تست اتصال",
         callback_data=AdminCB(action="panel_test", arg=panel_id),
@@ -310,8 +313,17 @@ def variant_choose() -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
-def inbounds_list(panel_id: int, rows: list) -> InlineKeyboardMarkup:
+def inbounds_list(
+    panel_id: int, rows: list, variant: str = "xui3"
+) -> InlineKeyboardMarkup:
     """فهرست اینباندهای ثبت‌شده یک پنل."""
+    can_manage = variant.strip().lower() in {
+        "xui3",
+        "v3",
+        "3.8",
+        "3x",
+        "mhsanaei3",
+    }
     b = InlineKeyboardBuilder()
     for r in rows:
         state = "🟢" if r.is_active else "⚪️"
@@ -326,15 +338,25 @@ def inbounds_list(panel_id: int, rows: list) -> InlineKeyboardMarkup:
         text="➕ از پنل بخوان",
         callback_data=AdminCB(action="inb_fetch", arg=panel_id),
     )
-    b.button(
-        text="🛠 ساخت اینباند",
-        callback_data=AdminCB(action="inb_add", arg=panel_id),
-    )
+    if can_manage:
+        b.button(
+            text="🛠 ساخت اینباند",
+            callback_data=AdminCB(action="inb_add", arg=panel_id),
+        )
     b.row(_back("panel_view", panel_id))
     return b.as_markup()
 
 
-def inbound_view(row_id: int, panel_id: int) -> InlineKeyboardMarkup:
+def inbound_view(
+    row_id: int, panel_id: int, variant: str = "xui3"
+) -> InlineKeyboardMarkup:
+    can_manage = variant.strip().lower() in {
+        "xui3",
+        "v3",
+        "3.8",
+        "3x",
+        "mhsanaei3",
+    }
     b = InlineKeyboardBuilder()
     b.button(
         text="🔁 تازه‌سازی اطلاعات",
@@ -348,26 +370,44 @@ def inbound_view(row_id: int, panel_id: int) -> InlineKeyboardMarkup:
         text="🗑 فقط از ربات",
         callback_data=AdminCB(action="inb_unreg_confirm", arg=row_id),
     )
-    b.button(
-        text="🗑 از پنل هم حذف کن",
-        callback_data=AdminCB(action="inb_del_confirm", arg=row_id),
-    )
+    if can_manage:
+        b.button(
+            text="🗑 از پنل هم حذف کن",
+            callback_data=AdminCB(action="inb_del_confirm", arg=row_id),
+        )
     b.adjust(2)
     b.row(_back("inb_list", panel_id))
     return b.as_markup()
 
 
-def confirm(text: str, yes_action: str, arg: int, back_action: str) -> InlineKeyboardMarkup:
+def inbound_view(row_id: int, panel_id: int, variant: str = "xui3") -> InlineKeyboardMarkup:
+    can_manage = variant.strip().lower() in {
+        "xui3",
+        "v3",
+        "3.8",
+        "3x",
+        "mhsanaei3",
+    }
     b = InlineKeyboardBuilder()
     b.button(
-        text="بله، حذف شود",
-        callback_data=AdminCB(action=yes_action, arg=arg).pack(),
+        text="🔁 تازه‌سازی اطلاعات",
+        callback_data=AdminCB(action="inb_sync", arg=row_id),
     )
     b.button(
-        text="انصراف",
-        callback_data=AdminCB(action=back_action, arg=arg).pack(),
+        text="🔀 تغییر وضعیت",
+        callback_data=AdminCB(action="inb_toggle", arg=row_id),
     )
+    b.button(
+        text="🗑 فقط از ربات",
+        callback_data=AdminCB(action="inb_unreg_confirm", arg=row_id),
+    )
+    if can_manage:
+        b.button(
+            text="🗑 از پنل هم حذف کن",
+            callback_data=AdminCB(action="inb_del_confirm", arg=row_id),
+        )
     b.adjust(2)
+    b.row(_back("inb_list", panel_id))
     return b.as_markup()
 
 

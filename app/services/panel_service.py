@@ -38,15 +38,15 @@ def settings_for_panel(panel: Panel) -> Settings:
     base = get_settings()
     return base.model_copy(
         update={
-            "xui_variant": panel.variant,
-            "xui_base_url": panel.base_url,
-            "xui_web_base_path": panel.web_base_path,
-            "xui_api_token": panel.api_token,
-            "xui_username": panel.username,
-            "xui_password": panel.password,
-            "xui_node_host": panel.node_host,
-            "xui_sub_base_url": panel.sub_base_url,
-            "xui_verify_ssl": panel.verify_ssl,
+            "xui_variant": panel.variant or "xui3",
+            "xui_base_url": panel.base_url or "",
+            "xui_web_base_path": panel.web_base_path or "",
+            "xui_api_token": panel.api_token or "",
+            "xui_username": panel.username or "",
+            "xui_password": panel.password or "",
+            "xui_node_host": panel.node_host or "",
+            "xui_sub_base_url": panel.sub_base_url or "",
+            "xui_verify_ssl": bool(panel.verify_ssl),
         }
     )
 
@@ -146,6 +146,99 @@ async def list_inbounds_of(
     ).scalars().all()
     return list(rows)
 
+
+def _parse_stream_settings(raw: Any) -> dict[str, Any]:
+    """استخراج network/security فارغ از string یا dict بودن فیلد پنل."""
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str) and raw.strip():
+        try:
+            import json
+
+            parsed = json.loads(raw)
+            return parsed if isinstance(parsed, dict) else {}
+        except ValueError:
+            return {}
+    return {}
+
+
+async def fetch_inbounds_from_panel(panel: Panel) -> list[dict]:
+    """خواندن اینباندهای زنده پنل در قالب یکدست، برای همه variantها.
+
+    بعضی کلاینت‌ها فقط list_inbounds دارند (نه options). این تابع
+    خروجی هر دو را به یک ساختار نرمال می‌کند.
+    """
+    client = get_provider_for_panel(panel)
+    raw: list[dict] = []
+    if hasattr(client, "list_inbound_options"):
+        try:
+            raw = await client.list_inbound_options() or []
+        except Exception:  # noqa: BLE001
+            raw = []
+    if not raw and hasattr(client, "list_inbounds"):
+        raw = await client.list_inbounds() or []
+    out: list[dict] = []
+    for item in raw:
+        stream = _parse_stream_settings(item.get("streamSettings"))
+        network = str(
+            item.get("network") or stream.get("network") or ""
+        )
+        security = str(
+            item.get("security") or stream.get("security") or ""
+        )
+        out.append(
+            {
+                "id": int(item.get("id") or 0),
+                "remark": str(item.get("remark") or ""),
+                "protocol": str(item.get("protocol") or ""),
+                "port": int(item.get("port") or 0),
+                "network": network,
+                "security": security,
+            }
+        )
+    return [x for x in out if x["id"]]
+
+
+async def get_inbound_info_for_panel(panel: Panel, inbound_id: int) -> dict:
+    """جزئیات یک اینباند به‌همراه network/security نرمال‌شده."""
+    client = get_provider_for_panel(panel)
+    if hasattr(client, "get_inbound_info"):
+        try:
+            info = await client.get_inbound_info(inbound_id)
+        except Exception:  # noqa: BLE001
+            info = {}
+        if info:
+            stream = _parse_stream_settings(info.get("streamSettings"))
+            if not info.get("network"):
+                info["network"] = stream.get("network") or ""
+            if not info.get("security"):
+                info["security"] = stream.get("security") or ""
+            return info
+    if hasattr(client, "get_inbound"):
+        inbound = await client.get_inbound(inbound_id) or {}
+        stream = _parse_stream_settings(inbound.get("streamSettings"))
+        return {
+            "id": int(inbound.get("id") or inbound_id),
+            "remark": str(inbound.get("remark") or ""),
+            "protocol": str(inbound.get("protocol") or ""),
+            "port": int(inbound.get("port") or 0),
+            "network": stream.get("network") or "",
+            "security": stream.get("security") or "",
+        }
+    if hasattr(client, "get_inbounds"):
+        for item in await client.get_inbounds() or []:
+            if int(item.get("id") or 0) == int(inbound_id):
+                stream = _parse_stream_settings(item.get("streamSettings"))
+                return {
+                    "id": int(item.get("id") or inbound_id),
+                    "remark": str(item.get("remark") or ""),
+                    "protocol": str(item.get("protocol") or ""),
+                    "port": int(item.get("port") or 0),
+                    "network": stream.get("network") or "",
+                    "security": stream.get("security") or "",
+                }
+    raise VpnError(f"inbound {inbound_id} یافت نشد")
+
 async def register_inbound(
     session: AsyncSession,
     panel: Panel,
@@ -190,14 +283,34 @@ async def unregister_inbound(session: AsyncSession, row: PanelInbound) -> None:
     await session.commit()
 
 
+async def delete_inbound_from_panel(panel: Panel, inbound_id: int) -> None:
+    """حذف اینباند از روی پنل؛ برای کلاینت‌هایی که متد اختصاصی ندارند خطا می‌دهد."""
+    client = get_provider_for_panel(panel)
+    if hasattr(client, "delete_inbound"):
+        await client.delete_inbound(inbound_id)
+        return
+    raise VpnError(
+        f"ساخت/حذف اینباند برای پنل‌های نوع «{panel.variant}» پشتیبانی نمی‌شود"
+    )
+
+
+async def create_inbound_on_panel(panel: Panel, spec: dict) -> int:
+    """ساخت اینباند روی پنل؛ برای کلاینت‌هایی که متد اختصاصی ندارند خطا می‌دهد."""
+    client = get_provider_for_panel(panel)
+    if hasattr(client, "create_inbound"):
+        return int(await client.create_inbound(spec))
+    raise VpnError(
+        f"ساخت/حذف اینباند برای پنل‌های نوع «{panel.variant}» پشتیبانی نمی‌شود"
+    )
+
+
 async def sync_inbound_meta(session: AsyncSession, row: PanelInbound) -> None:
     """فیلدها را از وضعیت زنده پنل تازه می‌کند."""
     panel = await session.get(Panel, row.panel_id)
     if panel is None:
         return
     try:
-        client = get_provider_for_panel(panel)
-        info = await client.get_inbound_info(row.inbound_id)
+        info = await get_inbound_info_for_panel(panel, row.inbound_id)
     except Exception as exc:  # noqa: BLE001
         logger.warning("sync inbound %s failed: %s", row.inbound_id, exc)
         return
@@ -257,9 +370,13 @@ __all__ = [
     "VARIANTS",
     "add_panel",
     "close_all",
+    "create_inbound_on_panel",
     "default_panel",
+    "delete_inbound_from_panel",
     "delete_panel",
     "ensure_default_from_env",
+    "fetch_inbounds_from_panel",
+    "get_inbound_info_for_panel",
     "get_panel",
     "get_provider_for_panel",
     "invalidate_cache",

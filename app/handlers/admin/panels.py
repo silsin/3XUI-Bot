@@ -62,6 +62,10 @@ async def panel_view(
         await call.answer("پنل یافت نشد.", show_alert=True)
         return
     rows = await ps.list_inbounds_of(session, panel.id)
+    client = ps.get_provider_for_panel(panel)
+    can_manage = hasattr(client, "create_inbound") and hasattr(
+        client, "delete_inbound"
+    )
     from app.services.panel_service import VARIANTS
 
     text = (
@@ -74,7 +78,11 @@ async def panel_view(
         f"اینباند ثبت‌شده: {fa_digits(len(rows))}\n"
         f"توکن: {'✅' if panel.api_token else '—'}"
     )
-    await call.message.edit_text(text, reply_markup=kb.panel_view(panel.id))
+    if not can_manage:
+        text += "\n\n⚠️ در این نوع پنل، ساخت/حذف اینباند از ربات پشتیبانی نمی‌شود."
+    await call.message.edit_text(
+        text, reply_markup=kb.panel_view(panel.id, can_manage=can_manage)
+    )
     await call.answer()
 
 
@@ -132,7 +140,10 @@ async def panel_del_confirm(
         "روی خود پنل و کلاینت‌هایش اثری ندارد."
     )
     await call.message.edit_text(
-        text, reply_markup=kb.confirm("", "panel_del_yes", panel.id, "panel_view")
+        text,
+        reply_markup=kb.confirm(
+            action="panel_del_yes", arg=panel.id, back_action="panel_view"
+        ),
     )
     await call.answer()
 
@@ -216,7 +227,12 @@ async def panel_field_save(
         await message.answer(f"🔴 خطا: {exc}")
         return
     await state.clear()
-    await message.answer("✅ ذخیره شد.", reply_markup=kb.panel_view(panel.id))
+    client = ps.get_provider_for_panel(panel)
+    manage = hasattr(client, "create_inbound") and hasattr(client, "delete_inbound")
+    await message.answer(
+        "✅ ذخیره شد.",
+        reply_markup=kb.panel_view(panel.id, panel.variant, manage),
+    )
 
 
 # ---------- ساخت پنل ----------
@@ -351,9 +367,11 @@ async def panel_host(message: Message, session: AsyncSession, state: FSMContext)
     await state.clear()
 
     # ذخیره اول بدون تست؛ ادمین بعداً دکمه تست می‌گیرد
+    client = ps.get_provider_for_panel(panel)
+    manage = hasattr(client, "create_inbound") and hasattr(client, "delete_inbound")
     await message.answer(
         f"✅ پنل <b>{panel.title}</b> ثبت شد.",
-        reply_markup=kb.panel_view(panel.id),
+        reply_markup=kb.panel_view(panel.id, panel.variant, manage),
     )
 
 
@@ -369,11 +387,16 @@ async def inb_list(
         await call.answer("پنل یافت نشد.", show_alert=True)
         return
     rows = await ps.list_inbounds_of(session, panel.id)
+    client = ps.get_provider_for_panel(panel)
     text = f"🛰 اینباندهای <b>{panel.title}</b>\n"
     if not rows:
-        text += "\n⚠️ اینباندی ثبت نشده. از «از پنل بخوان» یا «ساخت اینباند» استفاده کنید."
+        if hasattr(client, "create_inbound"):
+            text += "\n⚠️ اینباندی ثبت نشده. از «از پنل بخوان» یا «ساخت اینباند» استفاده کنید."
+        else:
+            text += "\n⚠️ اینباندی ثبت نشده. از «از پنل بخوان» استفاده کنید."
     await call.message.edit_text(
-        text, reply_markup=kb.inbounds_list(panel.id, rows)
+        text,
+        reply_markup=kb.inbounds_list(panel.id, rows, panel.variant),
     )
     await call.answer()
 
@@ -389,8 +412,7 @@ async def inb_fetch(
         return
     await call.answer("در حال خواندن پنل...")
     try:
-        client = ps.get_provider_for_panel(panel)
-        options = await client.list_inbound_options()
+        options = await ps.fetch_inbounds_from_panel(panel)
     except Exception as exc:  # noqa: BLE001
         await call.answer(f"🔴 {exc}"[:180], show_alert=True)
         return
@@ -426,6 +448,7 @@ async def inb_view(
         await call.answer("اینباند یافت نشد.", show_alert=True)
         return
     panel = await session.get(Panel, row.panel_id)
+    variant = panel.variant if panel else "xui3"
     state = "🟢" if row.is_active else "⚪️"
     text = (
         f"{state} <b>{row.remark or f'#{row.inbound_id}'}</b>\n"
@@ -436,8 +459,16 @@ async def inb_view(
         f"شبکه: <code>{row.network or '—'}</code> | امنیت: "
         f"<code>{row.security or '—'}</code>"
     )
+    if variant.strip().lower() not in {
+        "xui3",
+        "v3",
+        "3.8",
+        "3x",
+        "mhsanaei3",
+    }:
+        text += "\n\n⚠️ در این نوع پنل، ساخت/حذف اینباند از ربات پشتیبانی نمی‌شود."
     await call.message.edit_text(
-        text, reply_markup=kb.inbound_view(row.id, row.panel_id)
+        text, reply_markup=kb.inbound_view(row.id, row.panel_id, variant)
     )
     await call.answer()
 
@@ -573,8 +604,7 @@ async def _finish_inbound(
 
     await message.answer("⏳ در حال ساخت اینباند روی پنل...")
     try:
-        client = ps.get_provider_for_panel(panel)
-        inbound_id = await client.create_inbound(spec)
+        inbound_id = await ps.create_inbound_on_panel(panel, spec)
     except VpnError as exc:
         await message.answer(f"🔴 خطا: {exc}", reply_markup=kb.back_home())
         await state.clear()
@@ -615,7 +645,7 @@ async def _finish_inbound(
         f"پروتکل: {spec['protocol']} | شبکه: {spec['network']} | "
         f"امنیت: {spec['security']}\n"
         f"پورت: {spec['port']}",
-        reply_markup=kb.inbound_view(row.id, panel.id),
+        reply_markup=kb.inbound_view(row.id, panel.id, panel.variant),
     )
 
 
@@ -666,7 +696,10 @@ async def inb_unreg_confirm(
         "حذف شود؟\nروی پنل باقی می‌ماند."
     )
     await call.message.edit_text(
-        text, reply_markup=kb.confirm("", "inb_unreg_yes", row.id, "inb_view")
+        text,
+        reply_markup=kb.confirm(
+            action="inb_unreg_yes", arg=row.id, back_action="inb_view"
+        ),
     )
     await call.answer()
 
@@ -683,8 +716,11 @@ async def inb_unreg_yes(
     await ps.unregister_inbound(session, row)
     await call.answer("حذف شد.")
     rows = await ps.list_inbounds_of(session, panel_id)
+    panel = await session.get(Panel, panel_id)
+    variant = panel.variant if panel else "xui3"
     await call.message.edit_text(
-        f"🛰 اینباندهای پنل", reply_markup=kb.inbounds_list(panel_id, rows)
+        f"🛰 اینباندهای پنل",
+        reply_markup=kb.inbounds_list(panel_id, rows, variant),
     )
 
 
@@ -702,7 +738,10 @@ async def inb_del_confirm(
         "همه کلاینت‌های آن هم حذف خواهند شد. این عملیات برگشت‌پذیر نیست."
     )
     await call.message.edit_text(
-        text, reply_markup=kb.confirm("", "inb_del_yes", row.id, "inb_view")
+        text,
+        reply_markup=kb.confirm(
+            action="inb_del_yes", arg=row.id, back_action="inb_view"
+        ),
     )
     await call.answer()
 
@@ -724,8 +763,7 @@ async def inb_del_yes(
 
     await call.answer("در حال حذف از پنل...")
     try:
-        client = ps.get_provider_for_panel(panel)
-        await client.delete_inbound(inbound_id)
+        await ps.delete_inbound_from_panel(panel, inbound_id)
     except Exception as exc:  # noqa: BLE001
         logger.warning("delete_inbound %s failed: %s", inbound_id, exc)
         await call.answer(f"🔴 خطا: {exc}"[:180], show_alert=True)
@@ -734,5 +772,6 @@ async def inb_del_yes(
     await ps.unregister_inbound(session, row)
     rows = await ps.list_inbounds_of(session, panel_id)
     await call.message.edit_text(
-        "🛰 اینباندهای پنل", reply_markup=kb.inbounds_list(panel_id, rows)
+        "🛰 اینباندهای پنل",
+        reply_markup=kb.inbounds_list(panel_id, rows, panel.variant),
     )
