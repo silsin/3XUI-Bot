@@ -315,8 +315,15 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
         service_id: اگر مشخص شود، فقط کلاینت‌های آن سرویس بازسازی می‌شوند
     """
     from app.services import panel_service as pservice
+    from app.services.vpn import get_provider2
     
     default_provider = get_provider()
+    provider2 = get_provider2()
+    
+    logger.info("regenerate_links: default_provider=%s, provider2=%s, provider2_enabled=%s", 
+                type(default_provider).__name__, 
+                type(provider2).__name__ if provider2 else None,
+                provider2 is not None)
     
     stmt = select(ServiceClient).order_by(ServiceClient.id)
     if service_id:
@@ -327,6 +334,8 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
     if not clients:
         return 0
     
+    logger.info("Found %d clients to process", len(clients))
+    
     changed = 0
     primary_by_service: dict[int, str] = {}
     
@@ -336,6 +345,7 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
     async def get_panel_provider(pid: int) -> Any:
         if pid not in panel_providers:
             panel = await pservice.get_panel(session, pid)
+            logger.info("Panel %d: found=%s, active=%s", pid, panel is not None, panel.is_active if panel else None)
             if panel and panel.is_active:
                 panel_providers[pid] = pservice.get_provider_for_panel(panel)
             else:
@@ -346,20 +356,29 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
         # Determine which provider to use based on panel tag in email
         pid = panel_id_from_email(c.email)
         
+        logger.info("Client %s: email=%s, pid=%s", c.id, c.email[:50] if c.email else None, pid)
+        
         if pid is not None:
             # Client belongs to a specific panel
             provider = await get_panel_provider(pid)
+            logger.info("Using panel %d provider: %s", pid, type(provider).__name__ if provider else None)
             if provider is None:
                 logger.warning("panel %d not found for client %s, skipping", pid, c.email)
                 continue
+        elif provider2 is not None:
+            # Use provider2 as fallback if it's enabled
+            provider = provider2
+            logger.info("Using provider2 (XUI2) for untagged client")
         else:
             # Use default provider for clients without panel tag
             provider = default_provider
+            logger.info("Using default provider for untagged client")
         
         try:
             link = await provider.build_client_link(
                 c.inbound_id, c.client_uuid, c.email
             )
+            logger.info("Built link for %s: %s...", c.email[:30], link[:50] if link else None)
         except VpnError as exc:
             logger.warning("failed to build link for %s: %s", c.email, exc)
             continue
@@ -376,6 +395,7 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
             svc.config_link = link
 
     await session.commit()
+    logger.info("regenerate_links complete: changed=%d", changed)
     return changed
 
 
