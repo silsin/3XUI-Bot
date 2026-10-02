@@ -326,13 +326,18 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
                    p.id, p.title, p.variant, p.is_active, 
                    p.base_url[:60] if p.base_url else "None")
     
-    # Build provider for default panel
-    default_panel_provider = None
-    if all_panels:
-        default_panel = all_panels[0]  # First active panel
+    # Find an active panel to use as default
+    active_panels = [p for p in all_panels if p.is_active]
+    if active_panels:
+        default_panel = active_panels[0]
         default_panel_provider = pservice.get_provider_for_panel(default_panel)
-        logger.info("Using panel %d (%s) as default provider", default_panel.id, default_panel.title)
+        logger.info("Using active panel %d (%s) as default provider", default_panel.id, default_panel.title)
+    elif all_panels:
+        default_panel = all_panels[0]  # First panel as fallback
+        default_panel_provider = pservice.get_provider_for_panel(default_panel)
+        logger.warning("No active panels found, using inactive panel %d (%s) as fallback", default_panel.id, default_panel.title)
     else:
+        default_panel_provider = None
         logger.info("No panels in database, using .env provider")
     
     stmt = select(ServiceClient).order_by(ServiceClient.id)
