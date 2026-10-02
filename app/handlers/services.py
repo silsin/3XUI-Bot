@@ -269,6 +269,8 @@ async def regen_config(
     user: User,
 ) -> None:
     """بازسازی کانفیگ‌ها از تنظیمات پنل."""
+    logger.info("regen_config called for service %s by user %s", callback_data.service_id, user.id)
+    
     service = await session.get(Service, callback_data.service_id)
     if service is None or service.user_id != user.id:
         await call.answer("سرویس یافت نشد.", show_alert=True)
@@ -281,6 +283,7 @@ async def regen_config(
         count = await provisioning.regenerate_links(session, service.id)
         await session.refresh(service)
         
+        logger.info("regenerated %d configs for service %s", count, service.id)
         await call.answer(f"✅ {count} کانفیگ بازسازی شد.")
         
         # نمایش دوباره جزئیات سرویس
