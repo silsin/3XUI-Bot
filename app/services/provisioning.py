@@ -362,8 +362,8 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
             logger.info("Client %d: link updated OK", c.id)
             continue
 
-        # کلاینت روی پنل مقصد نیست - بسازش
-        logger.info("Client %d: not on dest panel, creating...", c.id)
+        # کلاینت روی پنل مقصد نیست - برای همه inbound های پنل مقصد بساز
+        logger.info("Client %d: not on dest panel, creating for all inbounds...", c.id)
 
         svc = await session.get(Service, c.service_id)
         if not svc:
@@ -378,32 +378,55 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
                 exp = exp.replace(tzinfo=timezone.utc)
             remaining_days = max(0, (exp - now).days)
 
-        # از inbound های پنل مقصد استفاده کن
-        target_inbound = dest_inbound_ids[0]
-
         # sub_id جدید بساز تا با قدیمی conflict نکنه
         new_sub_id = secrets.token_hex(8)
+        first_result = None
 
-        try:
-            result = await dest_provider.create_client(
-                inbound_id=target_inbound,
-                email=c.email,
-                days=remaining_days,
-                traffic_mb=svc.traffic_mb,
-                device_limit=1,
-                telegram_id=svc.user_id,
-                sub_id=new_sub_id,
-            )
-            c.inbound_id = target_inbound
-            c.client_uuid = result.uuid
-            c.config_link = result.config_link
-            # sub_id رو هم آپدیت کن روی سرویس
-            svc.sub_id = new_sub_id
-            changed += 1
-            primary_by_service.setdefault(c.service_id, c.config_link)
-            logger.info("Client %d: created on dest panel inbound=%d link=%s...", c.id, target_inbound, result.config_link[:60])
-        except VpnError as exc:
-            logger.warning("Client %d: failed to create: %s", c.id, exc)
+        for inb_id in dest_inbound_ids:
+            # چک کن این کلاینت قبلاً روی این inbound ساخته شده یا نه
+            existing_email = f"{c.email.rsplit('-i', 1)[0]}-i{inb_id}" if '-i' in c.email else c.email
+            # اگه inbound فعلی همون باشه که کلاینت داره، آپدیت کن
+            target_email = c.email if inb_id == dest_inbound_ids[0] else existing_email
+
+            try:
+                result = await dest_provider.create_client(
+                    inbound_id=inb_id,
+                    email=target_email,
+                    days=remaining_days,
+                    traffic_mb=svc.traffic_mb,
+                    device_limit=1,
+                    telegram_id=svc.user_id,
+                    sub_id=new_sub_id,
+                )
+                logger.info("Client %d: created on inbound=%d email=%s", c.id, inb_id, target_email)
+
+                # اولین inbound رو روی کلاینت اصلی ثبت کن
+                if first_result is None:
+                    first_result = result
+                    c.inbound_id = inb_id
+                    c.client_uuid = result.uuid
+                    c.config_link = result.config_link
+                    svc.sub_id = new_sub_id
+                    changed += 1
+                    primary_by_service.setdefault(c.service_id, c.config_link)
+                else:
+                    # بقیه inbound ها رو به عنوان ServiceClient جدید اضافه کن
+                    from app.db.models import ServiceClient as SC
+                    new_sc = SC(
+                        service_id=c.service_id,
+                        inbound_id=inb_id,
+                        protocol=result.protocol,
+                        label=(result.protocol or "config").upper(),
+                        client_uuid=result.uuid,
+                        email=target_email,
+                        config_link=result.config_link,
+                        enabled=True,
+                    )
+                    session.add(new_sc)
+                    logger.info("Client %d: added new ServiceClient for inbound=%d", c.id, inb_id)
+
+            except VpnError as exc:
+                logger.warning("Client %d: failed to create on inbound=%d: %s", c.id, inb_id, exc)
 
     # لینک اصلی سرویس رو آپدیت کن
     for svc_id, link in primary_by_service.items():
