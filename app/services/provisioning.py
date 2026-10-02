@@ -395,21 +395,6 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
             provider = default_provider
             logger.info("No panels in DB, using .env provider")
         
-        # Get available inbounds from panel
-        try:
-            available_inbounds = await provider.get_inbounds()
-            inbound_ids = [inb.get('id') for inb in available_inbounds]
-            logger.info("Available inbounds on panel: %s", inbound_ids)
-            
-            # Check if client's inbound exists on this panel
-            if c.inbound_id not in inbound_ids:
-                logger.warning("Client %d: inbound %d not found on panel (available: %s) - skipping", 
-                             c.id, c.inbound_id, inbound_ids)
-                continue
-        except VpnError as inb_exc:
-            logger.warning("Could not get inbounds from panel: %s - skipping all clients", inb_exc)
-            continue
-        
         # Try to get link from any ACTIVE panel where client exists
         link_found = False
         error_messages = []
