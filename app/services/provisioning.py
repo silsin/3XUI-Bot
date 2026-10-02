@@ -141,11 +141,14 @@ async def create_service(
 
     created: list = []
     for panel_id, inb in inbounds:
-        provider, resolved_pid = await _provider_for(
-            session, panel_id, fallback_provider=default_provider
-        )
-        email = f"{base}{_panel_tag(resolved_pid)}-i{inb}"
+        email = ""
         try:
+            # هر کلاینت روی پنل خودش ساخته می‌شود؛ خطای یک پنل نباید
+            # کل خرید را متوقف کند (زیرا همینجا ممکن است رها شود).
+            provider, resolved_pid = await _provider_for(
+                session, panel_id, fallback_provider=default_provider
+            )
+            email = f"{base}{_panel_tag(resolved_pid)}-i{inb}"
             res = await provider.create_client(
                 inbound_id=inb,
                 email=email,
@@ -159,9 +162,16 @@ async def create_service(
         except VpnError as exc:
             logger.error(
                 "create_client failed on panel %s inbound %s: %s",
-                resolved_pid if resolved_pid is not None else "default",
+                panel_id if panel_id is not None else "default",
                 inb,
                 exc,
+            )
+        except Exception:  # noqa: BLE001 — هیچ خطای غیرمنتظره‌ای خرید را نگه ندارد
+            logger.exception(
+                "unexpected create failure on panel %s inbound %s (email=%s)",
+                panel_id,
+                inb,
+                email,
             )
 
     if not created:
