@@ -84,6 +84,10 @@ class VpnProvider(Protocol):
         """لینک اتصال کلاینت موجود را بدون ساخت مجدد برمی‌گرداند."""
         ...
 
+    async def get_inbounds(self) -> list[dict]:
+        """لیست همه inbounds موجود روی پنل."""
+        ...
+
     async def delete_client(self, inbound_id: int, client_uuid: str) -> None: ...
 
     async def set_enabled(

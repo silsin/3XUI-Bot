@@ -95,6 +95,10 @@ class Xui3Client:
         """پروژکشن سبک برای انتخاب اینباند (id/remark/protocol/port/...)."""
         return await self._request("GET", "/panel/api/inbounds/options") or []
 
+    async def get_inbounds(self) -> list[dict]:
+        """لیست همه inbounds با جزئیات کامل."""
+        return await self._request("GET", "/panel/api/inbounds/list") or []
+
     async def get_inbound_info(self, inbound_id: int) -> dict:
         """جزئیات یک اینباند + شبکه/امنیت استخراج‌شده از streamSettings."""
         inbound = await self._request(

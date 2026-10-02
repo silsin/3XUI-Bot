@@ -118,6 +118,10 @@ class XuiLegacyClient:
         payload = await self._post("/xui/inbound/list")
         return payload.get("obj") or []
 
+    async def get_inbounds(self) -> list[dict]:
+        """لیست همه inbounds (alias for list_inbounds)."""
+        return await self.list_inbounds()
+
     async def get_inbound(self, inbound_id: int) -> dict:
         for inbound in await self.list_inbounds():
             if int(inbound.get("id")) == int(inbound_id):
