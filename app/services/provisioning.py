@@ -435,8 +435,6 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
                     logger.warning("Service %d: failed for inbound=%d: %s", svc.id, inb_id, exc)
 
         # لینک اصلی سرویس رو از اولین کلاینت آپدیت کن
-        await session.flush()
-        await session.refresh(svc)
         if svc.clients:
             first_link = svc.clients[0].config_link
             if first_link:
