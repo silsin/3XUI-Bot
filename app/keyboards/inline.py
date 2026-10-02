@@ -274,6 +274,11 @@ def service_detail_kb(service: Service) -> InlineKeyboardMarkup:
         style="primary",
     )
     builder.button(
+        text="🔁 بازسازی کانفیگ",
+        callback_data=ServiceCB(action="regen_config", service_id=service.id),
+        style="primary",
+    )
+    builder.button(
         text="♻️ تمدید این سرویس",
         callback_data=BuyCB(action="durations", service_id=service.id),
         style="success",
