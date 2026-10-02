@@ -364,6 +364,15 @@ class Xui3Client:
         client = await self._get_client(email)
         # توجه: client["id"] شماره رکورد است؛ uuid واقعی در فیلد uuid است
         client_uuid = str(client.get("uuid") or "")
+
+        # نام پروتکل برای برچسب کانفیگ در سرویس کاربر
+        protocol = ""
+        try:
+            info = await self.get_inbound_info(inbound_id)
+            protocol = str(info.get("protocol") or "")
+        except VpnError as exc:
+            logger.warning("could not read protocol for inbound %s: %s", inbound_id, exc)
+
         link = await self.build_client_link(inbound_id, client_uuid, email)
 
         sub_link = ""
@@ -377,16 +386,23 @@ class Xui3Client:
             inbound_id=inbound_id,
             config_link=link,
             sub_link=sub_link,
-            protocol="",
+            protocol=protocol,
         )
 
     async def build_client_link(
         self, inbound_id: int, client_uuid: str, email: str
     ) -> str:
-        """لینک‌های آماده که خود پنل ساخته است."""
+        """لینک‌های آماده که خود پنل ساخته است.
+
+        اگر پنل لینکی برنگرداند (مثلاً share address روی آن پنل تنظیم
+        نشده) خطا پرتاب نمی‌کند و رشته خالی برمی‌گرداند؛ چون کلاینت روی
+        پنل ساخته شده و نباید از سرویس کاربر حذف شود. لینک بعداً با
+        ensure_share_addr یا «بازتولید لینک‌ها» درست می‌شود.
+        """
         links = await self._request("GET", f"/panel/api/clients/links/{email}") or []
         if not links:
-            raise VpnError(f"پنل لینکی برای {email} برنگرداند")
+            logger.warning("panel returned no links for %s (share address?)", email)
+            return ""
         return str(links[0])
 
     async def extend_client(

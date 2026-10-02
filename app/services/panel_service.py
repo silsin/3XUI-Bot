@@ -120,6 +120,28 @@ async def delete_panel(session: AsyncSession, panel: Panel) -> None:
     await session.commit()
 
 
+async def ensure_share_addrs(session: AsyncSession) -> list[str]:
+    """برای هر پنل فعال، وجود share address را تضمین می‌کند.
+
+    بدون این کار، پنل لینکی برنمی‌گرداند و کانفیگ کاربر خالی می‌ماند.
+    خروجی: نام پنل‌هایی که تنظیم نشدند.
+    """
+    failed: list[str] = []
+    for panel in await list_panels(session):
+        if not panel.is_active:
+            continue
+        try:
+            client = get_provider_for_panel(panel)
+            ensure = getattr(client, "ensure_share_addr", None)
+            if ensure is None:
+                continue
+            await ensure()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("share address failed for panel %s: %s", panel.id, exc)
+            failed.append(panel.title)
+    return failed
+
+
 async def test_panel(session: AsyncSession, panel: Panel) -> None:
     """اتصال را تست می‌کند؛ در صورت خطا VpnError پرتاب می‌کند."""
     try:
@@ -375,6 +397,7 @@ __all__ = [
     "delete_inbound_from_panel",
     "delete_panel",
     "ensure_default_from_env",
+    "ensure_share_addrs",
     "fetch_inbounds_from_panel",
     "get_inbound_info_for_panel",
     "get_panel",

@@ -47,8 +47,12 @@ async def main() -> None:
             from app.services import panel_service
 
             await panel_service.ensure_default_from_env(session)
+            # share address همه پنل‌ها؛ بدون آن پنل لینک برنمی‌گرداند
+            failed = await panel_service.ensure_share_addrs(session)
+            if failed:
+                logger.warning("share address missing for panels: %s", failed)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("panel seed skipped: %s", exc)
+            logger.warning("panel setup skipped: %s", exc)
 
     bot = Bot(
         token=settings.bot_token,
@@ -66,14 +70,6 @@ async def main() -> None:
 
     scheduler = setup_scheduler(bot, settings.timezone)
     scheduler.start()
-
-    # اطمینان از اینکه share address تنظیم شده تا لینک‌ها host خالی نداشته باشند
-    try:
-        from app.services.vpn import get_provider
-
-        await get_provider().ensure_share_addr()  # type: ignore[attr-defined]
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("share address check skipped: %s", exc)
 
     web_runner = None
     if settings.sub_public_url:
