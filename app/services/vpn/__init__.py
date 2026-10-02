@@ -35,11 +35,18 @@ def get_provider() -> VpnProvider:
 
 
 def get_provider2() -> Xui2Client | None:
-    """دریافت پنل دوم VPN (اگر فعال باشد)."""
+    """دریافت پنل دوم VPN.
+    
+    توجه: این تابع همیشه پنل را برمی‌گرداند اگر credentials تنظیم شده باشد.
+    پنل باید در .env با XUI2_BASE_URL و credentials تنظیم شود.
+    """
     global _provider2
     settings = get_settings()
-    if not settings.xui2_enabled:
+    
+    # Check if credentials are configured
+    if not settings.xui2_base_url or not settings.xui2_username or not settings.xui2_password:
         return None
+    
     if _provider2 is None:
         _provider2 = Xui2Client()
     return _provider2
