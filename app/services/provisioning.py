@@ -307,16 +307,24 @@ async def delete_service(session: AsyncSession, service: Service) -> None:
     await session.commit()
 
 
-async def regenerate_links(session: AsyncSession) -> int:
-    """لینک همه کلاینت‌ها را بر اساس host فعلی (دامنه) بازسازی می‌کند."""
+async def regenerate_links(session: AsyncSession, service_id: int | None = None) -> int:
+    """لینک همه کلاینت‌ها را بر اساس host فعلی (دامنه) بازسازی می‌کند.
+    
+    Args:
+        session: دیتابیس سشن
+        service_id: اگر مشخص شود، فقط کلاینت‌های آن سرویس بازسازی می‌شوند
+    """
     default_provider = get_provider()
-    clients = list(
-        (
-            await session.execute(
-                select(ServiceClient).order_by(ServiceClient.id)
-            )
-        ).scalars().all()
-    )
+    
+    stmt = select(ServiceClient).order_by(ServiceClient.id)
+    if service_id:
+        stmt = stmt.where(ServiceClient.service_id == service_id)
+    
+    clients = list((await session.execute(stmt)).scalars().all())
+    
+    if not clients:
+        return 0
+    
     changed = 0
     primary_by_service: dict[int, str] = {}
     for c in clients:

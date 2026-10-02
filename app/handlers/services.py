@@ -261,6 +261,43 @@ async def refresh_service(
         pass
 
 
+@router.callback_query(inline.ServiceCB.filter(F.action == "regen_config"))
+async def regen_config(
+    call: CallbackQuery,
+    callback_data: inline.ServiceCB,
+    session: AsyncSession,
+    user: User,
+) -> None:
+    """بازسازی کانفیگ‌ها از تنظیمات پنل."""
+    service = await session.get(Service, callback_data.service_id)
+    if service is None or service.user_id != user.id:
+        await call.answer("سرویس یافت نشد.", show_alert=True)
+        return
+    
+    await call.answer("🔄 در حال بازسازی کانفیگ‌ها...")
+    
+    try:
+        # بازسازی لینک‌ها از پنل
+        count = await provisioning.regenerate_links(session, service.id)
+        await session.refresh(service)
+        
+        await call.answer(f"✅ {count} کانفیگ بازسازی شد.")
+        
+        # نمایش دوباره جزئیات سرویس
+        try:
+            await call.message.edit_text(
+                _detail_text(service),
+                reply_markup=inline.service_detail_kb(service),
+                disable_web_page_preview=True,
+            )
+        except Exception:
+            pass
+        
+    except Exception as e:
+        logger.exception("regen_config failed")
+        await call.answer(f"❌ خطا: {str(e)[:50]}", show_alert=True)
+
+
 @router.callback_query(inline.ServiceCB.filter(F.action == "wallet"))
 async def open_wallet(
     call: CallbackQuery,
