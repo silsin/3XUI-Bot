@@ -410,6 +410,11 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
             logger.warning("Could not get inbounds from panel: %s - skipping all clients", inb_exc)
             continue
         
+        # Try to get link from any ACTIVE panel where client exists
+        link_found = False
+        error_messages = []
+        
+        # Try default ACTIVE panel first
         try:
             link = await provider.build_client_link(
                 c.inbound_id, c.client_uuid, c.email
@@ -422,18 +427,89 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
                     c.config_link = link
                     changed += 1
                 primary_by_service.setdefault(c.service_id, c.config_link)
-                continue  # Success, move to next client
-            
-            # Link is empty or invalid, need to create client
-            logger.info("Client %d not found on panel, creating it...", c.id)
-            
+                logger.info("Client %d: config link updated from active panel", c.id)
+                link_found = True
+            else:
+                error_messages.append(f"active panel: client not found")
         except VpnError as exc:
-            logger.warning("Failed to build link for client %d (%s): %s", 
-                          c.id, c.email[:30] if c.email else "None", exc)
-            logger.info("Client %d not found on panel, creating it...", c.id)
+            error_messages.append(f"active panel: {exc}")
         
-        # Create missing client on panel
-        logger.info("Creating client %d on panel with email=%s", c.id, c.email[:60] if c.email else "None")
+        # If not found on default active panel, try other ACTIVE panels only
+        if not link_found and all_panels:
+            logger.info("Client %d: trying other ACTIVE panels for config link...", c.id)
+            
+            # Try each ACTIVE database panel (skip default provider since it's Panel 1/disabled)
+            for panel in all_panels:
+                if not panel.is_active:
+                    logger.debug("Skipping disabled panel %s", panel.title[:30])
+                    continue
+                
+                try:
+                    panel_provider = pservice.get_provider_for_panel(panel)
+                    if panel_provider == provider:
+                        continue  # Already tried this one
+                        
+                    link = await panel_provider.build_client_link(
+                        c.inbound_id, c.client_uuid, c.email
+                    )
+                    if link and "record not found" not in link.lower() and "obtain" not in link.lower():
+                        c.config_link = link
+                        changed += 1
+                        primary_by_service.setdefault(c.service_id, c.config_link)
+                        logger.info("Client %d: config link found from active panel %s", c.id, panel.title[:30])
+                        link_found = True
+                        break
+                except VpnError as exc:
+                    error_messages.append(f"panel {panel.id}: {exc}")
+        
+        # If still not found, create client on DESTINATION active panel
+        if not link_found:
+            logger.info("Client %d: not found on any ACTIVE panel, creating on destination panel...", c.id)
+            
+            # Get destination active panel's available inbounds
+            dest_inbounds = await provider.get_inbounds()
+            dest_inbound_ids = [inb.get('id') for inb in dest_inbounds]
+            
+            # Use first available inbound on destination active panel
+            if not dest_inbound_ids:
+                logger.warning("Client %d: destination active panel has no inbounds available", c.id)
+                continue
+            
+            dest_inbound_id = dest_inbound_ids[0]
+            logger.info("Client %d: using destination inbound %d (available: %s)", c.id, dest_inbound_id, dest_inbound_ids)
+            
+            try:
+                service = await session.get(Service, c.service_id)
+                if service:
+                    from datetime import datetime, timezone
+                    now = datetime.now(timezone.utc)
+                    remaining_days = 0
+                    if service.expires_at:
+                        exp = service.expires_at
+                        if exp.tzinfo is None:
+                            exp = exp.replace(tzinfo=timezone.utc)
+                        remaining_days = max(0, (exp - now).days)
+                    
+                    # Create client on destination active panel with destination inbound
+                    result = await provider.create_client(
+                        inbound_id=dest_inbound_id,
+                        email=c.email,
+                        days=remaining_days,
+                        traffic_mb=service.traffic_mb,
+                        device_limit=1,
+                        telegram_id=service.user_id,
+                        sub_id=service.sub_id,
+                    )
+                    # Update ServiceClient with new info from destination active panel
+                    c.inbound_id = dest_inbound_id
+                    c.client_uuid = result.uuid
+                    c.config_link = result.config_link
+                    changed += 1
+                    primary_by_service.setdefault(c.service_id, c.config_link)
+                    logger.info("Client %d: created on destination active panel (inbound=%d), link: %s...", 
+                               c.id, dest_inbound_id, result.config_link[:80] if result.config_link else "None")
+            except VpnError as exc:
+                logger.warning("Client %d: failed to create on destination active panel: %s", c.id, exc)
         try:
             # Get service info to recreate client
             service = await session.get(Service, c.service_id)
