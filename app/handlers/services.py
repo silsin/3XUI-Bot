@@ -269,11 +269,20 @@ async def regen_config(
     user: User,
 ) -> None:
     """بازسازی کانفیگ‌ها از تنظیمات پنل."""
-    logger.info("regen_config called for service %s by user %s", callback_data.service_id, user.id)
-    
     service = await session.get(Service, callback_data.service_id)
     if service is None or service.user_id != user.id:
         await call.answer("سرویس یافت نشد.", show_alert=True)
+        return
+    
+    # Check clients
+    from sqlalchemy import select
+    clients_result = await session.execute(
+        select(ServiceClient).where(ServiceClient.service_id == service.id)
+    )
+    clients = clients_result.scalars().all()
+    
+    if not clients:
+        await call.answer("⚠️ این سرویس کلاینتی ندارد.", show_alert=True)
         return
     
     await call.answer("🔄 در حال بازسازی کانفیگ‌ها...")
