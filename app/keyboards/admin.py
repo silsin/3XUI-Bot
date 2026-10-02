@@ -40,6 +40,50 @@ def home() -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
+def multi_inbound_picker(
+    entries: list, selected: set, has_panels: bool = True
+) -> InlineKeyboardMarkup:
+    """انتخاب اینباندها از همه پنل‌ها برای «اینباندهای کانفیگ».
+
+    entries: (panel_id, panel_title, inbound_id, remark, protocol, port)
+             panel_id برابر None یعنی پنل پیش‌فرض (بدون تگ).
+    selected: مجموعه (panel_id|None, inbound_id) انتخاب‌شده.
+
+    هر ردیف با row() ساخته می‌شود؛ adjust() فقط دکمه‌های همان لحظه
+    را پوشش می‌دهد و دکمه‌های بعدی را با هم می‌چیند.
+    """
+    from app.texts import S_MULTI_INBOUNDS
+
+    b = InlineKeyboardBuilder()
+    if not entries:
+        b.row(
+            InlineKeyboardButton(
+                text="ℹ️ اینباندی ثبت نشده — از «پنل‌ها و اینباندها» اضافه کنید",
+                callback_data=AdminCB(action="panels").pack(),
+            )
+        )
+    for pid, ptitle, inb, remark, proto, port in entries:
+        key = (pid, inb)
+        mark = "✅" if key in selected else "⬜️"
+        label = f"{mark} {ptitle} · {remark or f'#{inb}'} ({proto}:{port})"
+        b.row(
+            InlineKeyboardButton(
+                text=label[:64],
+                callback_data=AdminCB(
+                    action="multi_toggle", arg=pid or 0, arg2=inb
+                ).pack(),
+            )
+        )
+    b.row(
+        InlineKeyboardButton(
+            text="✏️ ورود دستی",
+            callback_data=AdminCB(action="edit", field=S_MULTI_INBOUNDS).pack(),
+        )
+    )
+    b.row(_back("home"))
+    return b.as_markup()
+
+
 def _back(action: str, arg: int = 0) -> InlineKeyboardButton:
     return InlineKeyboardButton(
         text=BTN_BACK, callback_data=AdminCB(action=action, arg=arg).pack()

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import secrets
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,17 +33,81 @@ logger = logging.getLogger(__name__)
 
 MB = 1024 ** 2
 
+# پیشوند تگ پنل در email کلاینت‌های چندپنلی: "...-p{panel_id}-i{inbound}"
+_PANEL_TAG = "-p"
 
-async def resolve_inbounds(session: AsyncSession, fallback: int) -> list[int]:
-    """فهرست inboundهای پیکربندی‌شده؛ اگر خالی بود از inbound پیش‌فرض استفاده می‌شود."""
+
+def _panel_tag(panel_id: int | None) -> str:
+    return f"{_PANEL_TAG}{panel_id}" if panel_id else ""
+
+
+def panel_id_from_email(email: str) -> int | None:
+    """استخراج شناسه پنل از تگ داخل email؛ اگر تگ نباشد None (پنل پیش‌فرض)."""
+    marker = f"{_PANEL_TAG}"
+    idx = str(email or "").rfind(marker)
+    if idx < 0:
+        return None
+    tail = str(email)[idx + len(marker):]
+    digits = ""
+    for ch in tail:
+        if ch.isdigit():
+            digits += ch
+        else:
+            break
+    return int(digits) if digits else None
+
+
+async def resolve_inbounds(
+    session: AsyncSession, fallback: int
+) -> list[tuple[int | None, int]]:
+    """فهرست (panel_id, inbound_id)؛ خالی یعنی از inbound پیش‌فرض.
+
+    فرمت تنظیم: "4,6" (پنل پیش‌فرض) یا "1:4,2:6" (panel_id:inbound_id).
+    مقادیر نامعتبر نادیده گرفته می‌شوند.
+    """
     raw = await cfg.get(session, S_MULTI_INBOUNDS, "")
-    ids: list[int] = []
+    pairs: list[tuple[int | None, int]] = []
+    seen: set[tuple[Any, ...]] = set()
     for part in raw.replace(" ", "").split(","):
-        if part.isdigit():
-            n = int(part)
-            if n not in ids:
-                ids.append(n)
-    return ids or [fallback]
+        if not part:
+            continue
+        panel_id: int | None = None
+        inbound_part = part
+        if ":" in part:
+            left, right = part.split(":", 1)
+            if left.isdigit() and right.isdigit():
+                panel_id = int(left)
+                inbound_part = right
+            else:
+                continue
+        elif not part.isdigit():
+            continue
+        key = (panel_id, int(inbound_part))
+        if key not in seen:
+            seen.add(key)
+            pairs.append((panel_id, int(inbound_part)))
+    return pairs or [(None, fallback)]
+
+
+async def _provider_for(
+    session: AsyncSession, panel_id: int | None, fallback_provider: Any = None
+) -> tuple[Any, int | None]:
+    """کلاینت پنل مناسب برای یک inbound؛ panel_id تهی یعنی پنل پیش‌فرض.
+
+    خروجی: (provider, panel_id_resolved). panel_id_resolved برای تگ‌کردن
+    email استفاده می‌شود؛ برای پنل پیش‌فرض None برمی‌گرداند تا email
+    کلاینت‌های قدیمی دست‌نخورده بماند.
+    """
+    from app.services import panel_service as pservice
+
+    if panel_id is None:
+        if fallback_provider is not None:
+            return fallback_provider, None
+        return get_provider(), None
+    panel = await pservice.get_panel(session, panel_id)
+    if panel is None or not panel.is_active:
+        raise VpnError(f"پنل {panel_id} یافت نشد یا غیرفعال است")
+    return pservice.get_provider_for_panel(panel), panel.id
 
 
 async def _load_service(session: AsyncSession, service_id: int) -> Service | None:
@@ -67,16 +132,19 @@ async def create_service(
     is_trial: bool = False,
     order: Order | None = None,
 ) -> Service:
-    """روی همه inboundهای پیکربندی‌شده کلاینت می‌سازد (هویت و سهمیه مشترک)."""
-    provider = get_provider()
+    """روی همه inboundهای پیکربندی‌شده (هر کدام روی پنل خودش) کلاینت می‌سازد."""
+    default_provider = get_provider()
     inbounds = await resolve_inbounds(session, inbound_id)
 
     base = f"{user.id}-{'trial' if is_trial else 'srv'}-{secrets.token_hex(3)}"
     sub_id = secrets.token_hex(8)
 
     created: list = []
-    for inb in inbounds:
-        email = f"{base}-i{inb}"
+    for panel_id, inb in inbounds:
+        provider, resolved_pid = await _provider_for(
+            session, panel_id, fallback_provider=default_provider
+        )
+        email = f"{base}{_panel_tag(resolved_pid)}-i{inb}"
         try:
             res = await provider.create_client(
                 inbound_id=inb,
@@ -89,7 +157,12 @@ async def create_service(
             )
             created.append(res)
         except VpnError as exc:
-            logger.error("create_client failed on inbound %s: %s", inb, exc)
+            logger.error(
+                "create_client failed on panel %s inbound %s: %s",
+                resolved_pid if resolved_pid is not None else "default",
+                inb,
+                exc,
+            )
 
     if not created:
         raise VpnError("هیچ inboundی قابل ساخت نبود")
@@ -170,12 +243,14 @@ async def renew_service(
     title: str = "",
     reset_traffic: bool = True,  # ← برای renewal، حجم را reset کن
 ) -> Service:
-    """تمدید همه کلاینت‌های سرویس روی همان inboundها."""
-    provider = get_provider()
+    """تمدید همه کلاینت‌های سرویس روی همان inboundها (هر کدام روی پنل خودش)."""
     service = await _load_service(session, service.id) or service
     reset = service.status is not ServiceStatus.ACTIVE or reset_traffic
 
     for client in service.clients:
+        provider, _ = await _provider_for(
+            session, panel_id_from_email(client.email)
+        )
         try:
             await provider.extend_client(
                 inbound_id=client.inbound_id,
@@ -209,9 +284,11 @@ async def renew_service(
 
 async def delete_service(session: AsyncSession, service: Service) -> None:
     """حذف همه کلاینت‌های سرویس از پنل و دیتابیس."""
-    provider = get_provider()
     service = await _load_service(session, service.id) or service
     for client in service.clients:
+        provider, _ = await _provider_for(
+            session, panel_id_from_email(client.email)
+        )
         try:
             await provider.delete_client(client.inbound_id, client.client_uuid)
         except VpnError as exc:
@@ -222,7 +299,7 @@ async def delete_service(session: AsyncSession, service: Service) -> None:
 
 async def regenerate_links(session: AsyncSession) -> int:
     """لینک همه کلاینت‌ها را بر اساس host فعلی (دامنه) بازسازی می‌کند."""
-    provider = get_provider()
+    default_provider = get_provider()
     clients = list(
         (
             await session.execute(
@@ -233,6 +310,11 @@ async def regenerate_links(session: AsyncSession) -> int:
     changed = 0
     primary_by_service: dict[int, str] = {}
     for c in clients:
+        provider, _ = await _provider_for(
+            session,
+            panel_id_from_email(c.email),
+            fallback_provider=default_provider,
+        )
         try:
             link = await provider.build_client_link(
                 c.inbound_id, c.client_uuid, c.email
@@ -254,19 +336,56 @@ async def regenerate_links(session: AsyncSession) -> int:
     return changed
 
 
+async def _usage_for(
+    session: AsyncSession,
+    service: Service,
+    usage_map: dict | None,
+) -> tuple[dict[str, Any], Any]:
+    """مصرف همه کلاینت‌های سرویس را از پنل‌های مربوطه جمع می‌کند.
+
+    usage_map ورودی فقط برای پنل پیش‌فرض معتبر است؛ برای کلاینت‌های
+    چندپنلی به‌صورت جداگانه خوانده می‌شود.
+    """
+    provider = get_provider()
+    merged: dict[str, Any] = dict(usage_map) if usage_map else {}
+    if usage_map is None:
+        try:
+            merged.update(await provider.get_all_usage())
+        except VpnError as exc:
+            logger.warning("usage fetch failed: %s", exc)
+
+    from app.services import panel_service as pservice
+
+    other_panels: dict[int, Any] = {}
+
+    async def _panel_provider(pid: int) -> Any | None:
+        if pid not in other_panels:
+            panel = await pservice.get_panel(session, pid)
+            if panel is None or not panel.is_active:
+                return None
+            other_panels[pid] = pservice.get_provider_for_panel(panel)
+        return other_panels[pid]
+
+    for client in service.clients:
+        pid = panel_id_from_email(client.email)
+        if pid is None or client.email in merged:
+            continue
+        pvd = await _panel_provider(pid)
+        if pvd is None:
+            continue
+        try:
+            merged[client.email] = await pvd.get_usage(client.email)
+        except VpnError as exc:
+            logger.warning("usage fetch failed for %s: %s", client.email, exc)
+    return merged, provider
+
+
 async def sync_service(
     session: AsyncSession, service: Service, usage_map: dict | None = None
 ) -> Service:
     """مصرف کلاینت‌ها را جمع می‌کند؛ در صورت عبور از سهمیه یا انقضا همه را قطع می‌کند."""
-    provider = get_provider()
     service = await _load_service(session, service.id) or service
-
-    if usage_map is None:
-        try:
-            usage_map = await provider.get_all_usage()
-        except VpnError as exc:
-            logger.warning("usage fetch failed: %s", exc)
-            return service
+    usage_map, provider = await _usage_for(session, service, usage_map)
 
     total_used = 0
     latest_expiry_ms = 0
@@ -294,8 +413,12 @@ async def sync_service(
     if is_expired or over_quota:
         for client in service.clients:
             if client.enabled:
+                cprovider, _ = await _provider_for(
+                    session, panel_id_from_email(client.email),
+                    fallback_provider=provider,
+                )
                 try:
-                    await provider.set_enabled(
+                    await cprovider.set_enabled(
                         client.inbound_id, client.client_uuid, client.email, False
                     )
                 except VpnError:
@@ -341,14 +464,19 @@ async def split_service(
             f"({parent.traffic_mb} MB) بیشتر است."
         )
 
-    provider = get_provider()
+    default_provider = get_provider()
     inbounds = await resolve_inbounds(session, parent.inbound_id)
 
     # ── کاهش سهمیه سرویس والد روی پنل ──────────────────────────
     new_parent_mb = max(0, parent.traffic_mb - allocated_mb)
     for client in parent.clients:
+        cprovider, _ = await _provider_for(
+            session,
+            panel_id_from_email(client.email),
+            fallback_provider=default_provider,
+        )
         try:
-            await provider.set_quota_mb(
+            await cprovider.set_quota_mb(
                 inbound_id=client.inbound_id,
                 client_uuid=client.client_uuid,
                 email=client.email,
@@ -377,10 +505,13 @@ async def split_service(
     sub_id = secrets.token_hex(8)
 
     created: list = []
-    for inb in inbounds:
-        email = f"{base}-i{inb}"
+    for panel_id, inb in inbounds:
+        cprovider, resolved_pid = await _provider_for(
+            session, panel_id, fallback_provider=default_provider
+        )
+        email = f"{base}{_panel_tag(resolved_pid)}-i{inb}"
         try:
-            res = await provider.create_client(
+            res = await cprovider.create_client(
                 inbound_id=inb,
                 email=email,
                 days=remaining_days,
@@ -391,14 +522,24 @@ async def split_service(
             )
             created.append(res)
         except VpnError as exc:
-            logger.error("split create_client failed on inbound %s: %s", inb, exc)
+            logger.error(
+                "split create_client failed on panel %s inbound %s: %s",
+                resolved_pid if resolved_pid is not None else "default",
+                inb,
+                exc,
+            )
 
     if not created:
         # برگرداندن سهمیه والد در صورت شکست
         parent.traffic_mb = parent.traffic_mb + allocated_mb
         for client in parent.clients:
+            cprovider, _ = await _provider_for(
+                session,
+                panel_id_from_email(client.email),
+                fallback_provider=default_provider,
+            )
             try:
-                await provider.set_quota_mb(
+                await cprovider.set_quota_mb(
                     inbound_id=client.inbound_id,
                     client_uuid=client.client_uuid,
                     email=client.email,

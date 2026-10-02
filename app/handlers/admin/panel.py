@@ -170,20 +170,107 @@ async def show_points(call: CallbackQuery, session: AsyncSession) -> None:
     await call.answer()
 
 
+def _parse_multi(raw: str) -> list[tuple[int | None, int]]:
+    """متن تنظیم را به لیست (panel_id|None, inbound_id) تبدیل می‌کند."""
+    out: list[tuple[int | None, int]] = []
+    seen: set[tuple] = set()
+    for part in (raw or "").replace(" ", "").split(","):
+        if not part:
+            continue
+        pid: int | None = None
+        num = part
+        if ":" in part:
+            left, right = part.split(":", 1)
+            if not (left.isdigit() and right.isdigit()):
+                continue
+            pid, num = int(left), right
+        elif not part.isdigit():
+            continue
+        key = (pid, int(num))
+        if key not in seen:
+            seen.add(key)
+            out.append(key)
+    return out
+
+
+def _format_multi(items: list[tuple[int | None, int]]) -> str:
+    """لیست را به متن تنظیم برمی‌گرداند؛ پنل پیش‌فرض بدون پیشوند."""
+    return ",".join(
+        (f"{pid}:{inb}" if pid is not None else str(inb))
+        for pid, inb in items
+    )
+
+
+async def _all_inbound_entries(
+    session: AsyncSession,
+) -> list[tuple[int, str, int, str, str, int]]:
+    """همه اینباندهای ثبت‌شده در همه پنل‌ها، همراه نام پنل."""
+    from app.services import panel_service as ps
+
+    entries: list[tuple[int, str, int, str, str, int]] = []
+    for panel in await ps.list_panels(session):
+        for row in await ps.list_inbounds_of(session, panel.id):
+            entries.append(
+                (
+                    panel.id,
+                    panel.title,
+                    row.inbound_id,
+                    row.remark,
+                    row.protocol,
+                    row.port,
+                )
+            )
+    return entries
+
+
 @router.callback_query(kb.AdminCB.filter(F.action == "multi"))
 async def show_multi(call: CallbackQuery, session: AsyncSession) -> None:
-    current = await cfg.get(session, S_MULTI_INBOUNDS)
+    """انتخاب اینباندها از همه پنل‌ها برای ساخت کانفیگ."""
+    raw = await cfg.get(session, S_MULTI_INBOUNDS)
+    entries = await _all_inbound_entries(session)
+    selected = set(_parse_multi(raw))
+
+    active = ", ".join(
+        f"{p if p is not None else '—'}:{i}" for p, i in selected
+    )
     text = (
         "🧩 <b>اینباندهای کانفیگ (چند پروتکل)</b>\n\n"
-        f"فعلی: <code>{current or '—'}</code>\n\n"
-        "شماره inboundهای پنل را با کاما وارد کنید (مثلاً <code>4,6,7</code>).\n"
-        "برای هر خرید/تست، روی <b>همه‌ی</b> این inboundها یک کانفیگ ساخته می‌شود "
+        f"فعلی: <code>{raw or '—'}</code>\n"
+    )
+    if active:
+        text += f"فعال: <code>{active}</code>\n"
+    text += (
+        "\nهر اینباندی را که بخواهید از <b>هر پنلی</b> انتخاب کنید.\n"
+        "برای هر خرید/تست، روی <b>همه‌ی</b> این‌ها کانفیگ ساخته می‌شود "
         "که همگی به یک کاربر تعلق دارند و سهمیه‌شان مشترک است."
     )
+    if not entries:
+        text += (
+            "\n\n⚠️ اینباندی ثبت نشده است. از «🛰 پنل‌ها و اینباندها» "
+            "اینباندهای پنل را ثبت کنید."
+        )
     await call.message.edit_text(
-        text, reply_markup=kb.edit_list([(S_MULTI_INBOUNDS, "✏️ ویرایش لیست inbound")])
+        text, reply_markup=kb.multi_inbound_picker(entries, selected, bool(entries))
     )
     await call.answer()
+
+
+@router.callback_query(kb.AdminCB.filter(F.action == "multi_toggle"))
+async def multi_toggle(
+    call: CallbackQuery, callback_data: kb.AdminCB, session: AsyncSession
+) -> None:
+    """انتخاب/لغو یک اینباند در تنظیم چندپروتکلی."""
+    pid: int | None = callback_data.arg or None
+    inb = callback_data.arg2
+
+    items = _parse_multi(await cfg.get(session, S_MULTI_INBOUNDS))
+    key = (pid, inb)
+    if key in items:
+        items = [k for k in items if k != key]
+    else:
+        items.append(key)
+    await cfg.set_value(session, S_MULTI_INBOUNDS, _format_multi(items))
+    await show_multi(call, session)
 
 
 # ---------- ویرایش یک مقدار ----------
