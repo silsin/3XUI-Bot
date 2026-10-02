@@ -418,6 +418,7 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
             logger.info("Client %d not found on panel, creating it...", c.id)
         
         # Create missing client on panel
+        logger.info("Creating client %d on panel with email=%s", c.id, c.email[:60] if c.email else "None")
         try:
             # Get service info to recreate client
             service = await session.get(Service, c.service_id)
@@ -431,6 +432,9 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
                     if exp.tzinfo is None:
                         exp = exp.replace(tzinfo=timezone.utc)
                     remaining_days = max(0, (exp - now).days)
+                
+                logger.info("Calling create_client: inbound=%d, days=%d, traffic_mb=%d, email=%s", 
+                           c.inbound_id, remaining_days, service.traffic_mb, c.email[:60])
                 
                 # Create client on panel
                 result = await provider.create_client(
@@ -449,8 +453,12 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
                 logger.info("Created client %d on panel, new link: %s...", c.id, result.config_link[:80] if result.config_link else "None")
                 primary_by_service.setdefault(c.service_id, c.config_link)
                 continue
+            else:
+                logger.warning("Service %d not found for client %d", c.service_id, c.id)
         except VpnError as create_exc:
             logger.warning("Failed to create client %d on panel: %s", c.id, create_exc)
+            import traceback
+            logger.warning("Traceback: %s", traceback.format_exc())
         
         logger.warning("Skipping client %d - could not create on panel", c.id)
         continue
