@@ -400,53 +400,60 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
                 c.inbound_id, c.client_uuid, c.email
             )
             logger.info("Built link for client %d: %s...", c.id, link[:80] if link else "None")
+            
+            # Check if link is valid
+            if link and "record not found" not in link.lower() and "obtain" not in link.lower():
+                if link != c.config_link:
+                    c.config_link = link
+                    changed += 1
+                primary_by_service.setdefault(c.service_id, c.config_link)
+                continue  # Success, move to next client
+            
+            # Link is empty or invalid, need to create client
+            logger.info("Client %d not found on panel, creating it...", c.id)
+            
         except VpnError as exc:
             logger.warning("Failed to build link for client %d (%s): %s", 
                           c.id, c.email[:30] if c.email else "None", exc)
-            continue
+            logger.info("Client %d not found on panel, creating it...", c.id)
         
-        # If link is empty or contains "record not found", client doesn't exist on panel
-        if not link or "record not found" in link.lower() or "obtain" in link.lower():
-            logger.info("Client %d not found on panel (empty link), creating it...", c.id)
-            try:
-                # Get service info to recreate client
-                service = await session.get(Service, c.service_id)
-                if service:
-                    # Calculate remaining days
-                    from datetime import datetime, timezone
-                    now = datetime.now(timezone.utc)
-                    remaining_days = 0
-                    if service.expires_at:
-                        exp = service.expires_at
-                        if exp.tzinfo is None:
-                            exp = exp.replace(tzinfo=timezone.utc)
-                        remaining_days = max(0, (exp - now).days)
-                    
-                    # Create client on panel
-                    result = await provider.create_client(
-                        inbound_id=c.inbound_id,
-                        email=c.email,
-                        days=remaining_days,
-                        traffic_mb=service.traffic_mb,
-                        device_limit=1,
-                        telegram_id=service.user_id,
-                        sub_id=service.sub_id,
-                    )
-                    # Update ServiceClient with new info from panel
-                    c.client_uuid = result.uuid
-                    c.config_link = result.config_link
-                    changed += 1
-                    logger.info("Created client %d on panel, new link: %s...", c.id, result.config_link[:80] if result.config_link else "None")
-                    continue
-            except VpnError as create_exc:
-                logger.warning("Failed to create client %d on panel: %s", c.id, create_exc)
-            logger.warning("Skipping client %d - could not create on panel", c.id)
-            continue
-            
-        if link and link != c.config_link:
-            c.config_link = link
-            changed += 1
-        primary_by_service.setdefault(c.service_id, c.config_link)
+        # Create missing client on panel
+        try:
+            # Get service info to recreate client
+            service = await session.get(Service, c.service_id)
+            if service:
+                # Calculate remaining days
+                from datetime import datetime, timezone
+                now = datetime.now(timezone.utc)
+                remaining_days = 0
+                if service.expires_at:
+                    exp = service.expires_at
+                    if exp.tzinfo is None:
+                        exp = exp.replace(tzinfo=timezone.utc)
+                    remaining_days = max(0, (exp - now).days)
+                
+                # Create client on panel
+                result = await provider.create_client(
+                    inbound_id=c.inbound_id,
+                    email=c.email,
+                    days=remaining_days,
+                    traffic_mb=service.traffic_mb,
+                    device_limit=1,
+                    telegram_id=service.user_id,
+                    sub_id=service.sub_id,
+                )
+                # Update ServiceClient with new info from panel
+                c.client_uuid = result.uuid
+                c.config_link = result.config_link
+                changed += 1
+                logger.info("Created client %d on panel, new link: %s...", c.id, result.config_link[:80] if result.config_link else "None")
+                primary_by_service.setdefault(c.service_id, c.config_link)
+                continue
+        except VpnError as create_exc:
+            logger.warning("Failed to create client %d on panel: %s", c.id, create_exc)
+        
+        logger.warning("Skipping client %d - could not create on panel", c.id)
+        continue
 
     # لینک اصلی هر سرویس را هم به‌روزرسانی کن
     for service_id, link in primary_by_service.items():
