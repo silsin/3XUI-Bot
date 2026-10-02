@@ -408,6 +408,7 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
 
             for inb_id in missing_inbound_ids:
                 new_email = f"{base}-i{inb_id}"
+                new_sub_id = secrets.token_hex(8)  # sub_id جدید برای هر inbound
                 try:
                     result = await dest_provider.create_client(
                         inbound_id=inb_id,
@@ -416,7 +417,7 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
                         traffic_mb=svc.traffic_mb,
                         device_limit=1,
                         telegram_id=svc.user_id,
-                        sub_id=svc.sub_id,
+                        sub_id=new_sub_id,
                     )
                     new_sc = ServiceClient(
                         service_id=svc.id,
