@@ -78,6 +78,16 @@ def multi_inbound_picker(
         InlineKeyboardButton(
             text="✏️ ورود دستی",
             callback_data=AdminCB(action="edit", field=S_MULTI_INBOUNDS).pack(),
+        ),
+        InlineKeyboardButton(
+            text="🔄 بروزرسانی",
+            callback_data=AdminCB(action="multi").pack(),
+        ),
+    )
+    b.row(
+        InlineKeyboardButton(
+            text="🛰 پنل‌ها و اینباندها",
+            callback_data=AdminCB(action="panels").pack(),
         )
     )
     b.row(_back("home"))

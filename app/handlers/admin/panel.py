@@ -203,13 +203,29 @@ def _format_multi(items: list[tuple[int | None, int]]) -> str:
 
 async def _all_inbound_entries(
     session: AsyncSession,
-) -> list[tuple[int, str, int, str, str, int]]:
-    """همه اینباندهای ثبت‌شده در همه پنل‌ها، همراه نام پنل."""
+) -> tuple[list[tuple[int, str, int, str, str, int]], list[str]]:
+    """اینباندهای قابل انتخاب از همه پنل‌ها.
+
+    دو منبع با هم ادغام می‌شوند:
+    ۱) اینباندهای ثبت‌شده در دیتابیس (بدون تماس شبکه)
+    ۲) اینباندهای زنده‌ی خود پنل، تا پنل تازه‌اضافه‌شده هم بدون
+       «از پنل بخوان» قابل انتخاب باشد.
+
+    خروجی: (entries, نام پنل‌هایی که خواندنشان ناموفق بود)
+    """
     from app.services import panel_service as ps
 
     entries: list[tuple[int, str, int, str, str, int]] = []
-    for panel in await ps.list_panels(session):
+    seen: set[tuple[int, int]] = set()
+    failed: list[str] = []
+
+    panels = [p for p in await ps.list_panels(session) if p.is_active]
+    for panel in panels:
         for row in await ps.list_inbounds_of(session, panel.id):
+            key = (panel.id, row.inbound_id)
+            if key in seen:
+                continue
+            seen.add(key)
             entries.append(
                 (
                     panel.id,
@@ -220,38 +236,120 @@ async def _all_inbound_entries(
                     row.port,
                 )
             )
-    return entries
+
+    for panel in panels:
+        try:
+            live = await ps.fetch_inbounds_from_panel(panel)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "live inbound fetch failed for panel %s: %s", panel.id, exc
+            )
+            failed.append(panel.title)
+            continue
+        for item in live:
+            inb = int(item.get("id") or 0)
+            if not inb:
+                continue
+            key = (panel.id, inb)
+            if key in seen:
+                continue
+            seen.add(key)
+            entries.append(
+                (
+                    panel.id,
+                    panel.title,
+                    inb,
+                    str(item.get("remark") or ""),
+                    str(item.get("protocol") or ""),
+                    int(item.get("port") or 0),
+                )
+            )
+    return entries, failed
+
+
+async def _multi_view(
+    session: AsyncSession,
+) -> tuple[list, list[str], set, list, str]:
+    """وضعیت فعلی انتخاب اینباندها، با یکدست‌سازی مقادیر قدیمی.
+
+    مقادیر قدیمی بدون پیشوند پنل (مثل «4») به پنل پیش‌فرض نسبت داده
+    می‌شوند تا هم تیک درست بخورند و هم هشدار اشتباه ندهند.
+
+    خروجی: (entries, failed, selected, orphaned, raw)
+    """
+    from app.services import panel_service as ps
+
+    raw = await cfg.get(session, S_MULTI_INBOUNDS)
+    entries, failed = await _all_inbound_entries(session)
+    known = {(pid, inb) for pid, _t, inb, *_r in entries}
+
+    default = await ps.default_panel(session)
+    did = default.id if default is not None else None
+
+    selected: set[tuple[int | None, int]] = set()
+    orphaned: list[tuple[int | None, int]] = []
+    for key in _parse_multi(raw):
+        pid, inb = key
+        if key in known:
+            selected.add(key)
+        elif pid is None and did is not None and (did, inb) in known:
+            selected.add((did, inb))
+        else:
+            orphaned.append(key)
+    return entries, failed, selected, orphaned, raw
+
+
+def _fmt_key(key: tuple[int | None, int]) -> str:
+    pid, inb = key
+    return f"{pid if pid is not None else '—'}:{inb}"
+
+
+async def _render_multi(
+    call: CallbackQuery, session: AsyncSession, view: tuple | None = None
+) -> None:
+    """صفحه انتخاب اینباندها را می‌سازد."""
+    if view is None:
+        view = await _multi_view(session)
+    entries, failed, selected, orphaned, _raw = view
+
+    text = "🧩 <b>اینباندهای کانفیگ (چند پروتکل)</b>\n\n"
+    if selected:
+        text += "✅ انتخاب‌شده: <code>" + "، ".join(
+            _fmt_key(k) for k in sorted(selected, key=lambda x: (x[0] or 0, x[1]))
+        ) + "</code>\n"
+    else:
+        text += "⚠️ هنوز چیزی انتخاب نشده — بدون انتخاب، از اینباند پکیج استفاده می‌شود.\n"
+    text += (
+        "\nهر اینباندی را از <b>هر پنلی</b> انتخاب کنید.\n"
+        "برای هر خرید/تست، روی <b>همه‌ی</b> این‌ها کانفیگ ساخته می‌شود "
+        "که همگی به یک کاربر تعلق دارند و سهمیه‌شان مشترک است."
+    )
+    if failed:
+        text += (
+            "\n\n🔴 خواندن این پنل‌ها ناموفق بود: <b>"
+            + "</b>، <b>".join(failed)
+            + "</b>\n(آدرس/توکن را از «🛰 پنل‌ها و اینباندها» تست کنید)"
+        )
+    if orphaned:
+        text += "\n\n⚠️ این انتخاب‌ها روی پنل پیدا نشدند: <code>" + "، ".join(
+            _fmt_key(k) for k in orphaned
+        ) + "</code>"
+    if not entries:
+        text += (
+            "\n\n⚠️ هیچ اینباندی پیدا نشد. ابتدا از «🛰 پنل‌ها و اینباندها» "
+            "پنل اضافه کنید و «🔌 تست اتصال» بگیرید."
+        )
+
+    await call.message.edit_text(
+        text,
+        reply_markup=kb.multi_inbound_picker(entries, selected, bool(entries)),
+    )
 
 
 @router.callback_query(kb.AdminCB.filter(F.action == "multi"))
 async def show_multi(call: CallbackQuery, session: AsyncSession) -> None:
     """انتخاب اینباندها از همه پنل‌ها برای ساخت کانفیگ."""
-    raw = await cfg.get(session, S_MULTI_INBOUNDS)
-    entries = await _all_inbound_entries(session)
-    selected = set(_parse_multi(raw))
-
-    active = ", ".join(
-        f"{p if p is not None else '—'}:{i}" for p, i in selected
-    )
-    text = (
-        "🧩 <b>اینباندهای کانفیگ (چند پروتکل)</b>\n\n"
-        f"فعلی: <code>{raw or '—'}</code>\n"
-    )
-    if active:
-        text += f"فعال: <code>{active}</code>\n"
-    text += (
-        "\nهر اینباندی را که بخواهید از <b>هر پنلی</b> انتخاب کنید.\n"
-        "برای هر خرید/تست، روی <b>همه‌ی</b> این‌ها کانفیگ ساخته می‌شود "
-        "که همگی به یک کاربر تعلق دارند و سهمیه‌شان مشترک است."
-    )
-    if not entries:
-        text += (
-            "\n\n⚠️ اینباندی ثبت نشده است. از «🛰 پنل‌ها و اینباندها» "
-            "اینباندهای پنل را ثبت کنید."
-        )
-    await call.message.edit_text(
-        text, reply_markup=kb.multi_inbound_picker(entries, selected, bool(entries))
-    )
+    await _render_multi(call, session)
     await call.answer()
 
 
@@ -259,18 +357,30 @@ async def show_multi(call: CallbackQuery, session: AsyncSession) -> None:
 async def multi_toggle(
     call: CallbackQuery, callback_data: kb.AdminCB, session: AsyncSession
 ) -> None:
-    """انتخاب/لغو یک اینباند در تنظیم چندپروتکلی."""
-    pid: int | None = callback_data.arg or None
-    inb = callback_data.arg2
+    """انتخاب/لغو یک اینباند در تنظیم چندپروتکلی.
 
-    items = _parse_multi(await cfg.get(session, S_MULTI_INBOUNDS))
-    key = (pid, inb)
-    if key in items:
+    مقادیر قدیمی بدون پیشوند پنل با اولین تغییر به شکل کامل (panel:inbound)
+    ذخیره می‌شوند تا دیگر با هیچ inboundی اشتباه نشوند.
+    """
+    view = await _multi_view(session)
+    _entries, _failed, selected, orphaned, _raw = view
+
+    key: tuple[int | None, int] = (
+        (callback_data.arg or None),
+        callback_data.arg2,
+    )
+    # انتخاب‌های نامعتبر قبلی حفظ می‌شوند تا کاربر داده‌اش را از دست ندهد
+    items: list[tuple[int | None, int]] = list(selected) + list(orphaned)
+    if key in selected:
         items = [k for k in items if k != key]
+        selected.discard(key)
     else:
         items.append(key)
+        selected.add(key)
+
     await cfg.set_value(session, S_MULTI_INBOUNDS, _format_multi(items))
-    await show_multi(call, session)
+    await _render_multi(call, session, view)
+    await call.answer()
 
 
 # ---------- ویرایش یک مقدار ----------
