@@ -398,6 +398,7 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
                 # host override اعمال کن
                 if host_override and hasattr(dest_provider, 'apply_host_override'):
                     link = dest_provider.apply_host_override(link, host_override)
+                    logger.info("  Client %d: after override: %s", c.id, link[:60])
                 if link != c.config_link:
                     c.config_link = link
                     changed += 1
