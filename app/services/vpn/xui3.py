@@ -404,6 +404,8 @@ class Xui3Client:
         # fix: پنل گاهی آدرس رو اینطور میذاره: @[https://host]:port → @host:port
         import re
         link = re.sub(r'@\[https?://([^\]]+)\]:(\d+)', r'@\1:\2', link)
+        # fix: @[host]:port → @host:port (بدون https)
+        link = re.sub(r'@\[([^\]]+)\]:(\d+)', r'@\1:\2', link)
         return link
 
     def apply_host_override(self, link: str, override: str) -> str:
@@ -411,8 +413,8 @@ class Xui3Client:
         if not override or not link:
             return link
         import re
-        # فرمت: protocol://...@host:port?...
-        return re.sub(r'(@)([^:@\?]+)(:\d+)', rf'\g<1>{override}\3', link, count=1)
+        # فرمت: protocol://uuid@host:port?...
+        return re.sub(r'(@)[^:@?#]+(:)', rf'\g<1>{override}\2', link, count=1)
 
     async def extend_client(
         self,

@@ -348,11 +348,10 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
         logger.warning("regenerate_links: dest panel has no inbounds")
         return 0
 
-    # host override از تنظیمات ادمین
-    from app.texts import S_CONFIG_HOST_OVERRIDE
-    host_override = await cfg.get(session, S_CONFIG_HOST_OVERRIDE, "")
+    # host override از تنظیمات پنل (node_host)
+    host_override = dest_panel.node_host or ""
     if host_override:
-        logger.info("regenerate_links: host override = %s", host_override)
+        logger.info("regenerate_links: host override from panel = %s", host_override)
 
     # سرویس‌هایی که باید پردازش بشن
     svc_stmt = select(Service).order_by(Service.id)
