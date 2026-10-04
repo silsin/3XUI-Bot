@@ -353,6 +353,17 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
     if host_override:
         logger.info("regenerate_links: host override from panel = %s", host_override)
 
+    def apply_override(link: str) -> str:
+        if not host_override or not link:
+            return link
+        import re
+        # پاک کردن براکت: @[https://host]:port → @host:port
+        link = re.sub(r'@\[https?://([^\]]+)\]:(\d+)', r'@\1:\2', link)
+        link = re.sub(r'@\[([^\]]+)\]:(\d+)', r'@\1:\2', link)
+        # جایگزینی آدرس: @host:port → @override:port
+        link = re.sub(r'(@)[^:@?#\[]+(:)', rf'\g<1>{host_override}\2', link, count=1)
+        return link
+
     # سرویس‌هایی که باید پردازش بشن
     svc_stmt = select(Service).order_by(Service.id)
     if service_id:
@@ -395,10 +406,7 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
                 link = ""
 
             if link and "record not found" not in link.lower() and "obtain" not in link.lower():
-                # host override اعمال کن
-                if host_override and hasattr(dest_provider, 'apply_host_override'):
-                    link = dest_provider.apply_host_override(link, host_override)
-                    logger.info("  Client %d: after override: %s", c.id, link[:60])
+                link = apply_override(link)
                 if link != c.config_link:
                     c.config_link = link
                     changed += 1
@@ -428,7 +436,7 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
                     )
                     c.inbound_id = target_inbound
                     c.client_uuid = result.uuid
-                    c.config_link = dest_provider.apply_host_override(result.config_link, host_override) if host_override and hasattr(dest_provider, 'apply_host_override') else result.config_link
+                    c.config_link = apply_override(result.config_link)
                     c.enabled = True
                     svc.sub_id = new_sub_id
                     changed += 1
@@ -462,7 +470,7 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
                         label=inbound_remarks.get(inb_id, (result.protocol or "config").upper()),
                         client_uuid=result.uuid,
                         email=new_email,
-                        config_link=dest_provider.apply_host_override(result.config_link, host_override) if host_override and hasattr(dest_provider, 'apply_host_override') else result.config_link,
+                        config_link=apply_override(result.config_link),
                         enabled=True,
                     )
                     session.add(new_sc)
