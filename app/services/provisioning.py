@@ -413,7 +413,7 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
                         email=c.email,
                         days=remaining_days,
                         traffic_mb=svc.traffic_mb,
-                        device_limit=1,
+                        device_limit=0,
                         telegram_id=svc.user_id,
                         sub_id=new_sub_id,
                     )
@@ -442,7 +442,7 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
                         email=new_email,
                         days=remaining_days,
                         traffic_mb=svc.traffic_mb,
-                        device_limit=1,
+                        device_limit=0,
                         telegram_id=svc.user_id,
                         sub_id=new_sub_id,
                     )

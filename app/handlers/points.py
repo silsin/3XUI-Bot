@@ -74,7 +74,7 @@ async def redeem_points(
             traffic_mb=0,
             inbound_id=inbound_id,
             title=f"اشتراک هدیه {fa_digits(days)} روزه",
-            device_limit=1,
+            device_limit=0,
         )
     except VpnError as exc:
         logger.error("redeem provisioning failed for %s: %s", user.id, exc)
