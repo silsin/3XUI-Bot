@@ -348,6 +348,12 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
         logger.warning("regenerate_links: dest panel has no inbounds")
         return 0
 
+    # host override از تنظیمات ادمین
+    from app.texts import S_CONFIG_HOST_OVERRIDE
+    host_override = await cfg.get(session, S_CONFIG_HOST_OVERRIDE, "")
+    if host_override:
+        logger.info("regenerate_links: host override = %s", host_override)
+
     # سرویس‌هایی که باید پردازش بشن
     svc_stmt = select(Service).order_by(Service.id)
     if service_id:
@@ -390,6 +396,9 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
                 link = ""
 
             if link and "record not found" not in link.lower() and "obtain" not in link.lower():
+                # host override اعمال کن
+                if host_override and hasattr(dest_provider, 'apply_host_override'):
+                    link = dest_provider.apply_host_override(link, host_override)
                 if link != c.config_link:
                     c.config_link = link
                     changed += 1
@@ -419,7 +428,7 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
                     )
                     c.inbound_id = target_inbound
                     c.client_uuid = result.uuid
-                    c.config_link = result.config_link
+                    c.config_link = dest_provider.apply_host_override(result.config_link, host_override) if host_override and hasattr(dest_provider, 'apply_host_override') else result.config_link
                     c.enabled = True
                     svc.sub_id = new_sub_id
                     changed += 1
@@ -453,7 +462,7 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
                         label=inbound_remarks.get(inb_id, (result.protocol or "config").upper()),
                         client_uuid=result.uuid,
                         email=new_email,
-                        config_link=result.config_link,
+                        config_link=dest_provider.apply_host_override(result.config_link, host_override) if host_override and hasattr(dest_provider, 'apply_host_override') else result.config_link,
                         enabled=True,
                     )
                     session.add(new_sc)

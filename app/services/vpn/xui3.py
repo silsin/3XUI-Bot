@@ -396,23 +396,23 @@ class Xui3Client:
     async def build_client_link(
         self, inbound_id: int, client_uuid: str, email: str
     ) -> str:
-        """لینک‌های آماده که خود پنل ساخته است.
-
-        اگر پنل لینکی برنگرداند (مثلاً share address روی آن پنل تنظیم
-        نشده) خطا پرتاب نمی‌کند و رشته خالی برمی‌گرداند؛ چون کلاینت روی
-        پنل ساخته شده و نباید از سرویس کاربر حذف شود. لینک بعداً با
-        ensure_share_addr یا «بازتولید لینک‌ها» درست می‌شود.
-        """
         links = await self._request("GET", f"/panel/api/clients/links/{email}") or []
         if not links:
             logger.warning("panel returned no links for %s (share address?)", email)
             return ""
         link = str(links[0])
-        # fix: پنل گاهی آدرس رو توی براکت میذاره مثل [https://host]:port
-        # باید تبدیل بشه به https://host:port
+        # fix: پنل گاهی آدرس رو اینطور میذاره: @[https://host]:port → @host:port
         import re
-        link = re.sub(r'\[([^\]]+)\](:(\d+))?', lambda m: m.group(1) + (f':{m.group(3)}' if m.group(3) else ''), link)
+        link = re.sub(r'@\[https?://([^\]]+)\]:(\d+)', r'@\1:\2', link)
         return link
+
+    def apply_host_override(self, link: str, override: str) -> str:
+        """آدرس داخل لینک vless/vmess رو با آدرس جایگزین عوض میکنه."""
+        if not override or not link:
+            return link
+        import re
+        # فرمت: protocol://...@host:port?...
+        return re.sub(r'(@)([^:@\?]+)(:\d+)', rf'\g<1>{override}\3', link, count=1)
 
     async def extend_client(
         self,

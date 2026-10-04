@@ -44,6 +44,8 @@ S_REDEEM_MIN_DAYS = "redeem_min_days"
 S_CONFIG_CAPTION = "config_caption"
 # فهرست inboundهای چند-پروتکل (با کاما). خالی = استفاده از inbound پکیج/تنظیمات
 S_MULTI_INBOUNDS = "multi_inbounds"
+# آدرس جایگزین در لینک کانفیگ (اگر خالی باشد، آدرس اصلی پنل استفاده می‌شود)
+S_CONFIG_HOST_OVERRIDE = "config_host_override"
 # تنظیمات عضویت الزامی در کانال
 S_REQUIRED_CHANNEL_ENABLED = "required_channel_enabled"  # True/False برای فعال/غیرفعال
 S_REQUIRED_CHANNEL_ID = "required_channel_id"  # شناسه کانال (منفی برای گروپ)
