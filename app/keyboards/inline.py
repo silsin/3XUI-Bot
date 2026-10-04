@@ -240,8 +240,11 @@ def services_kb(services: list[Service]) -> InlineKeyboardMarkup:
 def service_detail_kb(service: Service) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
 
-    # یک دکمه برای هر کانفیگ (پروتکل)
-    clients = sorted(getattr(service, "clients", []), key=lambda c: c.id)
+    # یک دکمه برای هر کانفیگ (پروتکل) - فقط enabled کلاینت‌ها
+    clients = sorted(
+        [c for c in getattr(service, "clients", []) if c.enabled],
+        key=lambda c: c.id
+    )
     cfg_rows: list[int] = []
     if clients:
         for c in clients:

@@ -330,8 +330,10 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
 
     # inbound های پنل مقصد - فقط enabled
     dest_inbounds = await dest_provider.get_inbounds()
-    dest_inbound_ids = [inb.get('id') for inb in dest_inbounds if inb.get('enable', True)]
+    dest_inbound_ids = [inb.get('id') for inb in dest_inbounds if inb.get('enable') is True]
+    all_inbound_ids = [inb.get('id') for inb in dest_inbounds]
     logger.info("regenerate_links: enabled inbounds on dest panel: %s", dest_inbound_ids)
+    logger.info("regenerate_links: all inbounds on dest panel: %s", all_inbound_ids)
 
     if not dest_inbound_ids:
         logger.warning("regenerate_links: dest panel has no inbounds")
@@ -366,6 +368,13 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
 
         # ۱. آپدیت/بازسازی کلاینت‌های موجود
         for c in svc.clients:
+            # اگه inbound این کلاینت disabled شده، غیرفعالش کن
+            if c.inbound_id not in dest_inbound_ids:
+                if c.enabled:
+                    c.enabled = False
+                    changed += 1
+                    logger.info("  Client %d inbound=%d: disabled (inbound not enabled)", c.id, c.inbound_id)
+                continue
             try:
                 link = await dest_provider.build_client_link(c.inbound_id, c.client_uuid, c.email)
             except VpnError:
