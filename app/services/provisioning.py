@@ -370,12 +370,12 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
 
         # ۱. آپدیت/بازسازی کلاینت‌های موجود
         for c in svc.clients:
-            # اگه inbound این کلاینت disabled شده، غیرفعالش کن
+            # اگه inbound این کلاینت توی لیست مقصد نیست، غیرفعالش کن
             if c.inbound_id not in dest_inbound_ids:
                 if c.enabled:
                     c.enabled = False
                     changed += 1
-                    logger.info("  Client %d inbound=%d: disabled (inbound not enabled)", c.id, c.inbound_id)
+                    logger.info("  Client %d inbound=%d: disabled (not in target list)", c.id, c.inbound_id)
                 continue
             try:
                 link = await dest_provider.build_client_link(c.inbound_id, c.client_uuid, c.email)
@@ -385,6 +385,9 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
             if link and "record not found" not in link.lower() and "obtain" not in link.lower():
                 if link != c.config_link:
                     c.config_link = link
+                    changed += 1
+                if not c.enabled:
+                    c.enabled = True
                     changed += 1
                 logger.info("  Client %d inbound=%d: link OK", c.id, c.inbound_id)
             else:
@@ -405,6 +408,7 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
                     c.inbound_id = target_inbound
                     c.client_uuid = result.uuid
                     c.config_link = result.config_link
+                    c.enabled = True
                     svc.sub_id = new_sub_id
                     changed += 1
                     logger.info("  Client %d: recreated on inbound=%d", c.id, target_inbound)
