@@ -337,6 +337,13 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
             dest_inbound_ids.append(inb_id)
     logger.info("regenerate_links: target inbounds for panel %d: %s", dest_panel.id, dest_inbound_ids)
 
+    # remark هر inbound رو از پنل بگیر برای label
+    dest_inbounds_raw = await dest_provider.get_inbounds()
+    inbound_remarks = {
+        inb.get('id'): (inb.get('remark') or inb.get('protocol') or 'config').upper()
+        for inb in dest_inbounds_raw
+    }
+
     if not dest_inbound_ids:
         logger.warning("regenerate_links: dest panel has no inbounds")
         return 0
@@ -389,7 +396,12 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
                 if not c.enabled:
                     c.enabled = True
                     changed += 1
-                logger.info("  Client %d inbound=%d: link OK", c.id, c.inbound_id)
+                # label رو از remark اینباند آپدیت کن
+                new_label = inbound_remarks.get(c.inbound_id, c.label)
+                if new_label and new_label != c.label:
+                    c.label = new_label
+                    changed += 1
+                logger.info("  Client %d inbound=%d: link OK label=%s", c.id, c.inbound_id, c.label)
             else:
                 # کلاینت روی پنل نیست - بسازش
                 logger.info("  Client %d inbound=%d: missing on panel, recreating...", c.id, c.inbound_id)
@@ -438,7 +450,7 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
                         service_id=svc.id,
                         inbound_id=inb_id,
                         protocol=result.protocol,
-                        label=(result.protocol or "config").upper(),
+                        label=inbound_remarks.get(inb_id, (result.protocol or "config").upper()),
                         client_uuid=result.uuid,
                         email=new_email,
                         config_link=result.config_link,
