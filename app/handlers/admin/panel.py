@@ -33,6 +33,7 @@ from app.texts import (
     S_CARD_NUMBER,
     S_CONFIG_CAPTION,
     S_CONFIG_HOST_OVERRIDE,
+    S_SUB_PUBLIC_URL,
     S_GUIDE_TEXT,
     S_INVITE_TEXT,
     S_MULTI_INBOUNDS,
@@ -64,6 +65,7 @@ TEXT_FIELDS = [
     (S_INVITE_TEXT, "متن دعوت"),
     (S_POINTS_TEXT, "متن امتیاز"),
     (S_CONFIG_HOST_OVERRIDE, "آدرس جایگزین در کانفیگ (خالی = آدرس پنل)"),
+    (S_SUB_PUBLIC_URL, "آدرس لینک اشتراک (خالی = از .env)"),
 ]
 PAYMENT_FIELDS = [(S_CARD_NUMBER, "شماره کارت"), (S_CARD_HOLDER, "نام صاحب کارت")]
 TRIAL_NUM_FIELDS = [

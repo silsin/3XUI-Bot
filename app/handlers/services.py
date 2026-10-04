@@ -14,7 +14,8 @@ from app.keyboards import inline
 from app.services import activity_service as activity
 from app.services import provisioning
 from app.services import wallet_service as wallet
-from app.texts import BTN_MY_SERVICES, MSG_NO_SERVICES, MSG_WALLET_NO_SERVICE, MSG_WALLET_SELECT_TYPE
+from app.texts import BTN_MY_SERVICES, MSG_NO_SERVICES, MSG_WALLET_NO_SERVICE, MSG_WALLET_SELECT_TYPE, S_SUB_PUBLIC_URL
+from app.services import settings_service as cfg_svc
 from app.utils.formatting import (
     days_left,
     days_left_text,
@@ -26,9 +27,12 @@ from app.utils.formatting import (
 from app.utils.qr import make_qr_png
 
 
-def sub_link_for(service: Service) -> str:
+async def sub_link_for(service: Service, session: AsyncSession) -> str:
     """لینک اشتراک ربات برای این سرویس (همه پروتکل‌ها)."""
-    base = get_settings().sub_public_url
+    # اول از تنظیمات ادمین بخون، بعد از .env
+    base = await cfg_svc.get(session, S_SUB_PUBLIC_URL, "")
+    if not base:
+        base = get_settings().sub_public_url
     if base and service.sub_id:
         return f"{base.rstrip('/')}/sub/{service.sub_id}"
     return service.sub_link or ""
@@ -74,7 +78,7 @@ async def _get_service(session: AsyncSession, service_id: int) -> Service | None
     ).scalar_one_or_none()
 
 
-def _detail_text(service: Service) -> str:
+async def _detail_text(service: Service, session: AsyncSession) -> str:
     total = service.traffic_mb * (1024 ** 2)
     lines = [
         f"🔎 <b>{service.title}</b>",
@@ -85,7 +89,7 @@ def _detail_text(service: Service) -> str:
         f"📊 حجم کل: <b>{traffic(service.traffic_mb)}</b>",
         f"📈 مصرف: {usage_text(service.used_bytes, total)}",
     ]
-    sub = sub_link_for(service)
+    sub = await sub_link_for(service, session)
     if sub:
         lines.append(
             f"\n🔗 <b>لینک اشتراک (همه پروتکل‌ها):</b>\n<code>{sub}</code>"
@@ -166,7 +170,7 @@ async def view_service(
     await call.answer()
     try:
         await call.message.edit_text(
-            _detail_text(service),
+            await _detail_text(service, session),
             reply_markup=inline.service_detail_kb(service),
             disable_web_page_preview=True,
         )
@@ -222,7 +226,7 @@ async def send_sub_link(
     if service is None or service.user_id != user.id:
         await call.answer("سرویس یافت نشد.", show_alert=True)
         return
-    sub = sub_link_for(service)
+    sub = await sub_link_for(service, session)
     if not sub:
         await call.answer("لینک اشتراک فعال نیست.", show_alert=True)
         return
@@ -253,7 +257,7 @@ async def refresh_service(
     service = await provisioning.sync_service(session, service)
     try:
         await call.message.edit_text(
-            _detail_text(service),
+            await _detail_text(service, session),
             reply_markup=inline.service_detail_kb(service),
             disable_web_page_preview=True,
         )

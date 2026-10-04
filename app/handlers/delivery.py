@@ -89,7 +89,7 @@ async def send_config(bot: Bot, chat_id: int, service: Service, session) -> None
 
     from app.handlers.services import sub_link_for
 
-    sub = sub_link_for(svc)
+    sub = await sub_link_for(svc, session)
     if sub:
         await bot.send_message(
             chat_id,

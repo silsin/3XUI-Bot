@@ -46,6 +46,8 @@ S_CONFIG_CAPTION = "config_caption"
 S_MULTI_INBOUNDS = "multi_inbounds"
 # آدرس جایگزین در لینک کانفیگ (اگر خالی باشد، آدرس اصلی پنل استفاده می‌شود)
 S_CONFIG_HOST_OVERRIDE = "config_host_override"
+# آدرس عمومی سرور اشتراک (اگر خالی باشد، از SUB_PUBLIC_URL در .env استفاده می‌شود)
+S_SUB_PUBLIC_URL = "sub_public_url"
 # تنظیمات عضویت الزامی در کانال
 S_REQUIRED_CHANNEL_ENABLED = "required_channel_enabled"  # True/False برای فعال/غیرفعال
 S_REQUIRED_CHANNEL_ID = "required_channel_id"  # شناسه کانال (منفی برای گروپ)
