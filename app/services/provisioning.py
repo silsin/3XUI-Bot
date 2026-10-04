@@ -354,14 +354,32 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
         logger.info("regenerate_links: host override from panel = %s", host_override)
 
     def apply_override(link: str) -> str:
+        """آدرس داخل لینک vless/vmess رو با آدرس جایگزین عوض میکنه."""
         if not host_override or not link:
             return link
-        import re
-        # پاک کردن براکت: @[https://host]:port → @host:port
-        link = re.sub(r'@\[https?://([^\]]+)\]:(\d+)', r'@\1:\2', link)
-        link = re.sub(r'@\[([^\]]+)\]:(\d+)', r'@\1:\2', link)
-        # جایگزینی آدرس: @host:port → @override:port
-        link = re.sub(r'(@)[^:@?#\[]+(:)', rf'\g<1>{host_override}\2', link, count=1)
+        import re, base64, json
+
+        # vless: مستقیم توی URL
+        if link.startswith("vless://") or link.startswith("trojan://"):
+            link = re.sub(r'@\[https?://([^\]]+)\]:(\d+)', r'@\1:\2', link)
+            link = re.sub(r'@\[([^\]]+)\]:(\d+)', r'@\1:\2', link)
+            link = re.sub(r'(@)[^:@?#\[]+(:)', rf'\g<1>{host_override}\2', link, count=1)
+            return link
+
+        # vmess: base64 encoded JSON
+        if link.startswith("vmess://"):
+            try:
+                b64 = link[8:]
+                # padding fix
+                b64 += "=" * (-len(b64) % 4)
+                data = json.loads(base64.b64decode(b64).decode())
+                data["add"] = host_override
+                new_b64 = base64.b64encode(json.dumps(data, ensure_ascii=False).encode()).decode()
+                return f"vmess://{new_b64}"
+            except Exception as e:
+                logger.warning("apply_override vmess failed: %s", e)
+                return link
+
         return link
 
     # سرویس‌هایی که باید پردازش بشن
@@ -410,6 +428,12 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
                 if link != c.config_link:
                     c.config_link = link
                     changed += 1
+                    logger.info("  Client %d inbound=%d: link updated", c.id, c.inbound_id)
+                elif host_override:
+                    # force update - override ممکنه اعمال نشده باشه
+                    c.config_link = link
+                    changed += 1
+                    logger.info("  Client %d inbound=%d: force override applied", c.id, c.inbound_id)
                 if not c.enabled:
                     c.enabled = True
                     changed += 1
