@@ -330,16 +330,19 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
 
     # inbound های پنل مقصد - فقط اونایی که ادمین انتخاب کرده (S_MULTI_INBOUNDS)
     configured = await resolve_inbounds(session, 1)
+    logger.info("regenerate_links: configured inbounds from settings: %s", configured)
     # فیلتر: فقط inbound هایی که مربوط به پنل مقصد هستن
     dest_inbound_ids = []
     for panel_id, inb_id in configured:
         if panel_id is None or panel_id == dest_panel.id:
             dest_inbound_ids.append(inb_id)
+    logger.info("regenerate_links: filtered for dest panel %d: %s", dest_panel.id, dest_inbound_ids)
     
     if not dest_inbound_ids:
         # fallback: inbound های enabled پنل مقصد
         dest_inbounds_raw = await dest_provider.get_inbounds()
         dest_inbound_ids = [inb.get('id') for inb in dest_inbounds_raw if inb.get('enable') is True]
+        logger.info("regenerate_links: fallback enabled inbounds: %s", dest_inbound_ids)
     
     logger.info("regenerate_links: target inbounds: %s", dest_inbound_ids)
 
