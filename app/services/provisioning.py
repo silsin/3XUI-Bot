@@ -328,12 +328,20 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
     dest_provider = pservice.get_provider_for_panel(dest_panel)
     logger.info("regenerate_links: destination panel = %s", dest_panel.title)
 
-    # inbound های پنل مقصد - فقط enabled
-    dest_inbounds = await dest_provider.get_inbounds()
-    dest_inbound_ids = [inb.get('id') for inb in dest_inbounds if inb.get('enable') is True]
-    all_inbound_ids = [inb.get('id') for inb in dest_inbounds]
-    logger.info("regenerate_links: enabled inbounds on dest panel: %s", dest_inbound_ids)
-    logger.info("regenerate_links: all inbounds on dest panel: %s", all_inbound_ids)
+    # inbound های پنل مقصد - فقط اونایی که ادمین انتخاب کرده (S_MULTI_INBOUNDS)
+    configured = await resolve_inbounds(session, 1)
+    # فیلتر: فقط inbound هایی که مربوط به پنل مقصد هستن
+    dest_inbound_ids = []
+    for panel_id, inb_id in configured:
+        if panel_id is None or panel_id == dest_panel.id:
+            dest_inbound_ids.append(inb_id)
+    
+    if not dest_inbound_ids:
+        # fallback: inbound های enabled پنل مقصد
+        dest_inbounds_raw = await dest_provider.get_inbounds()
+        dest_inbound_ids = [inb.get('id') for inb in dest_inbounds_raw if inb.get('enable') is True]
+    
+    logger.info("regenerate_links: target inbounds: %s", dest_inbound_ids)
 
     if not dest_inbound_ids:
         logger.warning("regenerate_links: dest panel has no inbounds")
