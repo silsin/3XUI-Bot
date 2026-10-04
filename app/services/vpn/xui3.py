@@ -407,7 +407,12 @@ class Xui3Client:
         if not links:
             logger.warning("panel returned no links for %s (share address?)", email)
             return ""
-        return str(links[0])
+        link = str(links[0])
+        # fix: پنل گاهی آدرس رو توی براکت میذاره مثل [https://host]:port
+        # باید تبدیل بشه به https://host:port
+        import re
+        link = re.sub(r'\[([^\]]+)\](:(\d+))?', lambda m: m.group(1) + (f':{m.group(3)}' if m.group(3) else ''), link)
+        return link
 
     async def extend_client(
         self,
