@@ -263,7 +263,7 @@ def service_detail_kb(service: Service) -> InlineKeyboardMarkup:
     from app.config import get_settings
 
     extra_rows: list[int] = []
-    if get_settings().sub_public_url and getattr(service, "sub_id", ""):
+    if getattr(service, "sub_id", ""):
         builder.button(
             text="🔗 لینک اشتراک + QR",
             callback_data=ServiceCB(action="sub", service_id=service.id),

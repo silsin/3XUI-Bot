@@ -29,12 +29,11 @@ from app.utils.qr import make_qr_png
 
 async def sub_link_for(service: Service, session: AsyncSession) -> str:
     """لینک اشتراک ربات برای این سرویس (همه پروتکل‌ها)."""
-    # اول از تنظیمات ادمین بخون، بعد از .env
     base = await cfg_svc.get(session, S_SUB_PUBLIC_URL, "")
     if not base:
         base = get_settings().sub_public_url
     if base and service.sub_id:
-        return f"{base.rstrip('/')}/sub/{service.sub_id}"
+        return f"{base.rstrip('/')}/{service.sub_id}"
     return service.sub_link or ""
 
 logger = logging.getLogger(__name__)
