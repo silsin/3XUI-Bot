@@ -430,13 +430,22 @@ async def regenerate_links(session: AsyncSession, service_id: int | None = None)
                     changed += 1
                     logger.info("  Client %d inbound=%d: link updated", c.id, c.inbound_id)
                 elif host_override:
-                    # force update - override ممکنه اعمال نشده باشه
                     c.config_link = link
                     changed += 1
                     logger.info("  Client %d inbound=%d: force override applied", c.id, c.inbound_id)
                 if not c.enabled:
                     c.enabled = True
                     changed += 1
+                # sub_id رو از پنل بخون و آپدیت کن
+                try:
+                    panel_client = await dest_provider._get_client(c.email)
+                    real_sub_id = panel_client.get('subId') or panel_client.get('sub_id') or ''
+                    if real_sub_id and real_sub_id != svc.sub_id:
+                        svc.sub_id = real_sub_id
+                        changed += 1
+                        logger.info("  Service %d: sub_id updated to %s", svc.id, real_sub_id)
+                except Exception:
+                    pass
                 # label رو از remark اینباند آپدیت کن
                 new_label = inbound_remarks.get(c.inbound_id, c.label)
                 if new_label and new_label != c.label:
