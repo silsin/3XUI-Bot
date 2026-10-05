@@ -57,8 +57,17 @@ async def send_config_message(bot: Bot, chat_id: int, label: str, link: str) -> 
     )
 
 
-async def send_config(bot: Bot, chat_id: int, service: Service, session) -> None:
+async def send_config(bot: Bot, chat_id: int, service: Service, session, skip_regenerate: bool = False) -> None:
     """کانفیگ‌های سرویس را برای کاربر می‌فرستد (همه پروتکل‌ها برای تست)."""
+    from app.services import provisioning
+
+    # اول لینک‌ها رو بازسازی کن تا آدرس و sub_id درست باشن
+    if not skip_regenerate:
+        try:
+            await provisioning.regenerate_links(session, service.id)
+        except Exception:
+            logger.warning("regenerate_links failed before send_config, continuing anyway")
+
     svc = (
         await session.execute(
             select(Service)
@@ -67,7 +76,7 @@ async def send_config(bot: Bot, chat_id: int, service: Service, session) -> None
         )
     ).scalar_one_or_none() or service
 
-    clients = sorted(getattr(svc, "clients", []), key=lambda c: c.id)
+    clients = sorted([c for c in getattr(svc, "clients", []) if c.enabled], key=lambda c: c.id)
     primary_link = clients[0].config_link if clients else svc.config_link
 
     template = await cfg.get(session, S_CONFIG_CAPTION)

@@ -314,6 +314,10 @@ async def regen_config(
             disable_web_page_preview=True,
         )
         await call.answer("✅ کانفیگ‌ها بازسازی شدند")
+
+        # ارسال کانفیگ‌ها برای کاربر (بدون regenerate دوباره)
+        from app.handlers.delivery import send_config
+        await send_config(call.bot, call.message.chat.id, service, session, skip_regenerate=True)
         
     except Exception as e:
         logger.exception("regen_config failed")
