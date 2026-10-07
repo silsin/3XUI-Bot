@@ -373,18 +373,43 @@ Codebase confirmed before writing this plan:
 | `router` (admin_transfer) | aiogram Router | `app/handlers/admin/transfer.py` |
 | `SOURCE_DIR` | module constant | `app/handlers/admin/transfer.py` = `"/opt/alovpnBot"` |
 
-## Verification Results
+## Verification Results — Iteration 1 (first implementation)
 
-All syntax checks passed (first iteration, no review findings):
+All syntax checks passed:
 
 ```
-python -m py_compile app/handlers/admin/transfer.py   → OK
-python -m py_compile app/states.py                    → OK
-python -m py_compile app/keyboards/admin.py           → OK
-python -m py_compile app/handlers/admin/__init__.py   → OK
+python -m py_compile app/handlers/admin/transfer.py   → OK (exit 0)
+python -m py_compile app/states.py                    → OK (exit 0)
+python -m py_compile app/keyboards/admin.py           → OK (exit 0)
+python -m py_compile app/handlers/admin/__init__.py   → OK (exit 0)
 ```
 
-Verified on: first implementation pass. No errors found.
+---
+
+## Verification Results — Iteration 2 (review fix)
+
+Review findings from `transfer-review.json` addressed:
+
+1. **Unretained background task** — Added `_active_transfers: set[asyncio.Task] = set()` at module level. Task is stored with `_active_transfers.add(task)` and removed on completion via `task.add_done_callback(_active_transfers.discard)`.
+
+2. **tar absent in container** — Replaced `asyncio.create_subprocess_exec("tar", ...)` with `_build_tar_in_memory()` using Python's built-in `tarfile` module + `loop.run_in_executor`. Archive bytes sent to destination via `conn.run("tar -xzC ...", input=tar_bytes)`. No dependency on system `tar`.
+
+3. **.env copy silently skipped** — Changed from silent skip to hard `raise RuntimeError(...)` when `env_proc.returncode != 0 or not env_bytes`. Transfer aborts with a clear Telegram error message.
+
+4. **No host-key verification warning** — Added explicit MITM warning in the confirmation message shown before the admin presses "confirm transfer".
+
+5. **Container health-check name assumption** — Replaced `docker inspect -f '{{.State.Status}}' alovpn-bot` with `cd {dest_dir} && docker compose ps --format '{{.State}}' | head -1`, scoped to the destination directory.
+
+6. **Stray dead-code return in admin.py** — Removed the unreachable `return b.as_markup()` that appeared after the real return in `inbound_security_choose`.
+
+All syntax checks passed after fixes:
+
+```
+python -m py_compile app/handlers/admin/transfer.py   → OK (exit 0)
+python -m py_compile app/states.py                    → OK (exit 0)
+python -m py_compile app/keyboards/admin.py           → OK (exit 0)
+python -m py_compile app/handlers/admin/__init__.py   → OK (exit 0)
+```
 
 ---
 

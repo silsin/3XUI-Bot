@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import io
 import logging
 import re
+import tarfile
+import tempfile
 
 import asyncssh  # اگر نصب نباشد خطا در استارت ظاهر می‌شود، نه در زمان اجرا
 
@@ -23,9 +26,11 @@ router = Router(name="admin_transfer")
 router.callback_query.filter(IsAdmin())
 router.message.filter(IsAdmin())
 
-# مسیر پیش‌فرض پروژه روی سرور مبدأ (قابل تغییر از طریق متغیر محیطی نیست؛
-# اگر مسیر متفاوت است ادمین باید docker-compose.yml را بررسی کند).
+# مسیر پیش‌فرض پروژه روی سرور مبدأ
 SOURCE_DIR = "/opt/alovpnBot"
+
+# نگه‌داری ارجاع به تسک‌های فعال تا GC آن‌ها را لغو نکند
+_active_transfers: set[asyncio.Task] = set()
 
 # ──────────────────────────────────────────────────────────────────────
 # تجزیه اطلاعات اتصال SSH
@@ -61,6 +66,43 @@ def _parse_creds(text: str) -> dict | None:
 
 
 # ──────────────────────────────────────────────────────────────────────
+# ساخت آرشیو پروژه در حافظه با tarfile پایتون (بدون وابستگی به tar سیستمی)
+# ──────────────────────────────────────────────────────────────────────
+
+_EXCLUDE_NAMES = {".git", ".venv", "__pycache__", "data", "DISABLED"}
+_EXCLUDE_SUFFIXES = (".pyc", ".db")
+
+
+def _build_tar_in_memory(source_dir: str) -> bytes:
+    """فایل‌های پروژه را با tarfile پایتون فشرده می‌کند و بایت‌ها را برمی‌گرداند.
+
+    استفاده از tarfile داخلی پایتون به جای اجرای tar سیستمی، وابستگی به
+    نصب بودن tar در محیط Docker را حذف می‌کند.
+    """
+    import os
+    import pathlib
+
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        root = pathlib.Path(source_dir)
+        for path in root.rglob("*"):
+            # حذف پوشه‌ها و فایل‌های استثنا
+            rel = path.relative_to(root)
+            parts = rel.parts
+            if any(p in _EXCLUDE_NAMES for p in parts):
+                continue
+            if path.suffix in _EXCLUDE_SUFFIXES:
+                continue
+            if path.name == ".env":
+                continue
+            try:
+                tar.add(str(path), arcname=str(rel))
+            except OSError:
+                pass  # فایل‌هایی که قابل خواندن نیستند نادیده گرفته می‌شوند
+    return buf.getvalue()
+
+
+# ──────────────────────────────────────────────────────────────────────
 # ورود به جریان انتقال
 # ──────────────────────────────────────────────────────────────────────
 
@@ -91,7 +133,7 @@ async def transfer_creds_handler(message: Message, state: FSMContext) -> None:
     """تجزیه اطلاعات SSH، حذف پیام ادمین و نمایش تأییدیه."""
     creds = _parse_creds(message.text or "")
 
-    # پاک‌سازی پیام ادمین قبل از هر چیز
+    # پاک‌سازی پیام ادمین قبل از هر چیز تا اطلاعات حساس در چت باقی نماند
     try:
         await message.delete()
     except Exception:
@@ -116,6 +158,9 @@ async def transfer_creds_handler(message: Message, state: FSMContext) -> None:
         f"🔢 پورت: <code>{creds['port']}</code>\n"
         f"👤 کاربر: <code>{creds['user']}</code>\n"
         f"🔑 احراز هویت: {auth_type}\n\n"
+        "⚠️ <b>هشدار امنیتی:</b> هویت سرور مقصد تأیید نمی‌شود (known_hosts=None). "
+        "اگر مسیر شبکه در معرض خطر باشد، اطلاعات، دیتابیس و توکن ربات ممکن است "
+        "افشا شوند. تنها در صورتی که به شبکه اطمینان دارید ادامه دهید.\n\n"
         "آیا انتقال را تأیید می‌کنید؟",
         parse_mode="HTML",
         reply_markup=kb.transfer_confirm_kb(),
@@ -145,8 +190,10 @@ async def transfer_confirm_yes(call: CallbackQuery, state: FSMContext) -> None:
     )
     await call.answer()
 
-    # اجرا در پس‌زمینه تا ربات پاسخ‌گو بماند
-    asyncio.create_task(_run_transfer(call.message, creds))  # type: ignore[arg-type]
+    # ایجاد تسک و ذخیره ارجاع آن تا GC آن را لغو نکند
+    task = asyncio.create_task(_run_transfer(call.message, creds))  # type: ignore[arg-type]
+    _active_transfers.add(task)
+    task.add_done_callback(_active_transfers.discard)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -157,7 +204,7 @@ async def _run_transfer(msg: Message, creds: dict) -> None:
     """تمام مراحل انتقال — ویرایش پیام در هر مرحله.
 
     هشدار امنیتی: known_hosts=None یعنی بررسی هویت سرور انجام نمی‌شود.
-    این برای یک انتقال یک‌بار توسط ادمین قابل قبول است اما MITM را ممکن می‌سازد.
+    این موضوع در صفحه تأییدیه به ادمین اطلاع‌رسانی شده است.
     """
 
     async def _edit(text: str) -> None:
@@ -178,7 +225,7 @@ async def _run_transfer(msg: Message, creds: dict) -> None:
             "host": host,
             "port": port,
             "username": creds["user"],
-            "known_hosts": None,  # بررسی هویت غیرفعال — ببینید هشدار بالا
+            "known_hosts": None,  # بررسی هویت غیرفعال — ادمین در صفحه تأیید آگاه شده است
         }
         if creds["password"]:
             connect_kwargs["password"] = creds["password"]
@@ -197,7 +244,10 @@ async def _run_transfer(msg: Message, creds: dict) -> None:
                     dest_dir = candidate
                     break
 
-            await _edit(f"📂 مسیر مقصد: <code>{dest_dir}</code>\n\n🐳 بررسی Docker روی سرور مقصد...")
+            await _edit(
+                f"📂 مسیر مقصد: <code>{dest_dir}</code>\n\n"
+                "🐳 بررسی Docker روی سرور مقصد..."
+            )
 
             # ── ۳. نصب Docker در صورت نیاز ───────────────────────────
             r_docker = await conn.run("docker --version", check=False)
@@ -211,29 +261,31 @@ async def _run_transfer(msg: Message, creds: dict) -> None:
             # ── ۴. ساخت پوشه مقصد ─────────────────────────────────────
             await conn.run(f"mkdir -p {dest_dir}", check=True)
 
-            # ── ۵. کپی فایل‌های پروژه با tar pipe ────────────────────
-            await _edit("📁 در حال کپی فایل‌های پروژه...")
+            # ── ۵. کپی فایل‌های پروژه با tarfile پایتون + SFTP ────────
+            await _edit("📁 در حال فشرده‌سازی فایل‌های پروژه (tarfile پایتون)...")
 
-            tar_proc = await asyncio.create_subprocess_exec(
-                "tar", "-czC", SOURCE_DIR,
-                "--exclude=data",
-                "--exclude=.env",
-                "--exclude=.git",
-                "--exclude=.venv",
-                "--exclude=__pycache__",
-                "--exclude=*.pyc",
-                "--exclude=*.db",
-                "--exclude=DISABLED",
-                ".",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            tar_bytes, tar_err = await tar_proc.communicate()
-            if tar_proc.returncode != 0:
+            import os
+            import pathlib
+
+            source_path = pathlib.Path(SOURCE_DIR)
+            if not source_path.is_dir():
                 raise RuntimeError(
-                    f"خطا در فشرده‌سازی فایل‌ها:\n{tar_err.decode(errors='replace')[:300]}"
+                    f"پوشه منبع پیدا نشد: {SOURCE_DIR}\n"
+                    "مطمئن شوید که SOURCE_DIR در transfer.py درست تنظیم شده است."
                 )
 
+            # ساخت آرشیو در حافظه (در thread pool تا event loop را مسدود نکند)
+            loop = asyncio.get_running_loop()
+            tar_bytes = await loop.run_in_executor(
+                None, _build_tar_in_memory, SOURCE_DIR
+            )
+
+            await _edit(
+                f"📁 آرشیو آماده شد ({len(tar_bytes) // 1024} KB). "
+                "در حال انتقال به سرور مقصد..."
+            )
+
+            # ارسال محتوای آرشیو از طریق SSH (بدون نیاز به tar سیستمی در مقصد)
             await conn.run(
                 f"tar -xzC {dest_dir}",
                 input=tar_bytes,
@@ -250,7 +302,7 @@ async def _run_transfer(msg: Message, creds: dict) -> None:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            db_bytes, _ = await db_proc.communicate()
+            db_bytes, db_err = await db_proc.communicate()
             if db_proc.returncode == 0 and db_bytes:
                 await conn.run(
                     f"mkdir -p {dest_dir}/data && cat > {dest_dir}/data/bot.db",
@@ -258,9 +310,17 @@ async def _run_transfer(msg: Message, creds: dict) -> None:
                     check=True,
                 )
             else:
-                logger.warning("کپی دیتابیس از volume انجام نشد (احتمالاً Docker socket در دسترس نیست)")
+                logger.warning(
+                    "کپی دیتابیس از volume انجام نشد (احتمالاً Docker socket در دسترس نیست)"
+                )
+                await _edit(
+                    "⚠️ کپی دیتابیس از volume انجام نشد — "
+                    "احتمالاً Docker socket در دسترس نیست.\n"
+                    "ادامه انتقال..."
+                )
+                await asyncio.sleep(3)
 
-            # ── ۷. کپی فایل .env ──────────────────────────────────────
+            # ── ۷. کپی فایل .env — در صورت خطا انتقال متوقف می‌شود ────
             await _edit("⚙️ در حال کپی تنظیمات .env...")
 
             env_proc = await asyncio.create_subprocess_exec(
@@ -268,13 +328,19 @@ async def _run_transfer(msg: Message, creds: dict) -> None:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            env_bytes, _ = await env_proc.communicate()
-            if env_proc.returncode == 0 and env_bytes:
-                await conn.run(
-                    f"cat > {dest_dir}/.env",
-                    input=env_bytes,
-                    check=True,
+            env_bytes, env_err = await env_proc.communicate()
+            if env_proc.returncode != 0 or not env_bytes:
+                raise RuntimeError(
+                    "کپی فایل .env با خطا مواجه شد. "
+                    "ربات روی مقصد بدون تنظیمات محیطی راه‌اندازی نخواهد شد.\n"
+                    f"جزئیات: {env_err.decode(errors='replace')[:200]}"
                 )
+
+            await conn.run(
+                f"cat > {dest_dir}/.env",
+                input=env_bytes,
+                check=True,
+            )
 
             # ── ۸. اجرای docker compose روی مقصد ─────────────────────
             await _edit("🚀 در حال راه‌اندازی ربات روی سرور مقصد...")
@@ -285,17 +351,23 @@ async def _run_transfer(msg: Message, creds: dict) -> None:
             )
 
             # ── ۹. انتظار تا اجرای کانتینر (حداکثر ۱۲۰ ثانیه) ───────
+            # از docker compose ps scoped به dest_dir استفاده می‌شود تا
+            # وابستگی به نام خاص کانتینر حذف شود.
             await _edit("⏳ منتظر راه‌اندازی کانتینر...")
 
+            container_up = False
             for _ in range(24):
                 await asyncio.sleep(5)
                 r_status = await conn.run(
-                    "docker inspect -f '{{.State.Status}}' alovpn-bot",
+                    f"cd {dest_dir} && docker compose ps --format '{{{{.State}}}}' | head -1",
                     check=False,
                 )
-                if (r_status.stdout or "").strip() == "running":
+                status = (r_status.stdout or "").strip()
+                if status == "running":
+                    container_up = True
                     break
-            else:
+
+            if not container_up:
                 raise RuntimeError("کانتینر در ۱۲۰ ثانیه راه‌اندازی نشد.")
 
         # ── ۱۰. موفقیت ────────────────────────────────────────────────

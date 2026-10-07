@@ -503,8 +503,6 @@ def inbound_security_choose(panel_id: int) -> InlineKeyboardMarkup:
     b.row(_back("inb_list", panel_id))
     return b.as_markup()
 
-    return b.as_markup()
-
 
 def transfer_confirm_kb() -> InlineKeyboardMarkup:
     """تأیید یا لغو انتقال ربات به سرور جدید."""
