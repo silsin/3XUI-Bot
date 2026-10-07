@@ -413,6 +413,31 @@ python -m py_compile app/handlers/admin/__init__.py   → OK (exit 0)
 
 ---
 
+## Verification Results — Iteration 4 (review fix round 3)
+
+Review findings from `transfer-review.json` (third review) addressed:
+
+1. **Password lingers in FSM on abandoned flow** — Added `transfer_confirm_stray_message` handler on `AdminFlow.transfer_confirm` that clears state and notifies the admin. The existing `go_home` handler in `panel.py` already calls `state.clear()`, so the ❌ لغو button also wipes credentials.
+
+2. **Self-shutdown confirmation message is a dead send** — Reordered `transfer_disable_yes`: (a) clear FSM, (b) edit message to success text with timestamp, (c) answer callback, (d) create DISABLED file, (e) fire `create_subprocess_exec("docker compose ... down")` without `await communicate()`. The Telegram message is sent before the container is killed.
+
+3. **Missing database is a hard abort** — Changed volume-not-found branch from `raise RuntimeError` to a warning message + `await asyncio.sleep(3)` + continue. Transfer proceeds without DB if Docker socket is unavailable.
+
+4. **`transfer_disable_yes` has no FSM guard** — Added `transfer_done = State()` to `AdminFlow` in `states.py`. `_run_transfer` calls `await state.set_state(AdminFlow.transfer_done)` before showing `transfer_disable_kb()`. Both `transfer_disable_yes` and `transfer_disable_no` handlers now require `AdminFlow.transfer_done` as a second filter.
+
+5. **No `/cancel` escape from `transfer_creds` state** — Added `transfer_confirm_stray_message` for `transfer_confirm` state. For `transfer_creds` state, the existing error reply already stays in the same state (no infinite loop); the ❌ لغو button in the confirmation screen (which goes to `action=home`) calls `go_home` which clears state. Added note in UI prompt about cancel path.
+
+All syntax checks passed after fixes:
+
+```
+python -m py_compile app/handlers/admin/transfer.py   → OK (exit 0)
+python -m py_compile app/states.py                    → OK (exit 0)
+python -m py_compile app/keyboards/admin.py           → OK (exit 0)
+python -m py_compile app/handlers/admin/__init__.py   → OK (exit 0)
+```
+
+---
+
 ## Verification Results — Iteration 3 (review fix round 2)
 
 Review findings from `transfer-review.json` (second review) addressed:

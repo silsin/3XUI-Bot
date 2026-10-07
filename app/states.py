@@ -55,6 +55,7 @@ class AdminFlow(StatesGroup):
     # مراحل انتقال ربات به سرور جدید
     transfer_creds = State()
     transfer_confirm = State()
+    transfer_done = State()  # پس از انتقال موفق — محافظ callback خاموش‌سازی
 
 
 class WalletTopupFlow(StatesGroup):

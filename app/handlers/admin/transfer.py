@@ -116,7 +116,8 @@ async def transfer_start(call: CallbackQuery, state: FSMContext) -> None:
         "<code>user@ip password</code>\n"
         "<code>user@ip:port</code>  (احراز هویت با کلید)\n"
         "<code>user@ip</code>       (احراز هویت با کلید)\n\n"
-        "⚠️ پیام بعد از تأیید پاک می‌شود.",
+        "⚠️ پیام بعد از تأیید پاک می‌شود.\n\n"
+        "برای لغو روی ❌ لغو در صفحه تأیید بزنید.",
         parse_mode="HTML",
     )
     await call.answer()
@@ -156,16 +157,32 @@ async def transfer_creds_handler(message: Message, state: FSMContext) -> None:
         f"🔢 پورت: <code>{creds['port']}</code>\n"
         f"👤 کاربر: <code>{creds['user']}</code>\n"
         f"🔑 احراز هویت: {auth_type}\n\n"
-        "🔴 <b>هشدار امنیتی مهم (MITM):</b>\n"
+        "🔴 <b>هشدار امنیتی مهم (حمله MITM):</b>\n"
         "هویت سرور مقصد تأیید <b>نمی‌شود</b> (known_hosts=None).\n"
-        "در صورتی که مسیر شبکه در معرض خطر باشد، یک مهاجم فعال می‌تواند قبل از "
-        "برقراری رمزنگاری جایگزین شود و <b>توکن ربات، دیتابیس و فایل .env</b> را "
+        "یک مهاجم فعال روی مسیر شبکه می‌تواند قبل از برقراری رمزنگاری "
+        "جایگزین شود و <b>توکن ربات، دیتابیس و محتوای .env</b> را "
         "شنود کند.\n\n"
-        "⚠️ تنها در شبکه‌ای که کاملاً به آن اطمینان دارید (مثلاً شبکه خصوصی یا VPN) "
+        "⚠️ <b>تنها در شبکه خصوصی یا VPN</b> که کاملاً به آن اطمینان دارید "
         "ادامه دهید.\n\n"
         "آیا انتقال را تأیید می‌کنید؟",
         parse_mode="HTML",
         reply_markup=kb.transfer_confirm_kb(),
+    )
+
+
+@router.message(AdminFlow.transfer_confirm)
+async def transfer_confirm_stray_message(message: Message, state: FSMContext) -> None:
+    """پیام‌های تایپ‌شده در حالت انتظار تأیید — state را پاک می‌کند.
+
+    اگر ادمین در حالت transfer_confirm پیامی تایپ کند (به جای زدن دکمه)،
+    جریان لغو و اطلاعات اتصال از FSM پاک می‌شوند.
+    """
+    await state.clear()
+    await message.answer(
+        "⚠️ جریان انتقال لغو شد و اطلاعات اتصال پاک شدند.\n"
+        "برای شروع مجدد روی 📦 انتقال به سرور جدید بزنید.",
+        parse_mode="HTML",
+        reply_markup=kb.back_home(),
     )
 
 
@@ -193,7 +210,8 @@ async def transfer_confirm_yes(call: CallbackQuery, state: FSMContext) -> None:
     await call.answer()
 
     # ایجاد تسک و ذخیره ارجاع آن تا GC آن را لغو نکند
-    task = asyncio.create_task(_run_transfer(call.message, creds))  # type: ignore[arg-type]
+    # state به تابع پاس می‌شود تا پس از موفقیت transfer_done تنظیم شود
+    task = asyncio.create_task(_run_transfer(call.message, creds, state))  # type: ignore[arg-type]
     _active_transfers.add(task)
     task.add_done_callback(_active_transfers.discard)
 
@@ -232,7 +250,7 @@ async def _find_bot_data_volume() -> str | None:
 # انتقال در پس‌زمینه
 # ──────────────────────────────────────────────────────────────────────
 
-async def _run_transfer(msg: Message, creds: dict) -> None:
+async def _run_transfer(msg: Message, creds: dict, state: FSMContext) -> None:
     """تمام مراحل انتقال — ویرایش پیام در هر مرحله.
 
     هشدار امنیتی: known_hosts=None یعنی بررسی هویت سرور انجام نمی‌شود.
@@ -362,6 +380,7 @@ async def _run_transfer(msg: Message, creds: dict) -> None:
                         check=True,
                     )
                 else:
+                    # DB خالی یا خطا در خواندن — ادامه می‌دهیم، انتقال را متوقف نمی‌کنیم
                     logger.warning(
                         "کپی دیتابیس از volume ناموفق بود (returncode=%d)",
                         db_proc.returncode,
@@ -369,16 +388,20 @@ async def _run_transfer(msg: Message, creds: dict) -> None:
                     await _edit(
                         "⚠️ کپی دیتابیس از volume ناموفق بود — "
                         "احتمالاً Docker socket در دسترس نیست.\n"
-                        "ادامه انتقال..."
+                        "ادامه انتقال بدون دیتابیس..."
                     )
                     await asyncio.sleep(3)
             else:
-                logger.warning("volume دیتابیس (bot_data) در این سرور پیدا نشد")
-                raise RuntimeError(
-                    "volume دیتابیس (bot_data) پیدا نشد.\n"
-                    "لطفاً مطمئن شوید که Docker socket در دسترس ربات است و "
-                    "volume با docker volume ls قابل رویت است."
+                # volume پیدا نشد — هشدار می‌دهیم و ادامه می‌دهیم
+                # (اگر Docker socket در دسترس نباشد این اتفاق می‌افتد)
+                logger.warning("volume دیتابیس (bot_data) در این سرور پیدا نشد — مرحله DB نادیده گرفته شد")
+                await _edit(
+                    "⚠️ volume دیتابیس (bot_data) پیدا نشد.\n"
+                    "انتقال بدون دیتابیس ادامه می‌یابد.\n"
+                    "اگر Docker socket روی کانتینر سوار نشده، دیتابیس کپی نمی‌شود.\n\n"
+                    "⚙️ در حال کپی تنظیمات .env..."
                 )
+                await asyncio.sleep(3)
 
             # ── ۷. کپی فایل .env — در صورت خطا انتقال متوقف می‌شود ────
             await _edit("⚙️ در حال کپی تنظیمات .env...")
@@ -435,6 +458,10 @@ async def _run_transfer(msg: Message, creds: dict) -> None:
             await asyncio.sleep(5)
 
         # ── ۱۰. موفقیت ────────────────────────────────────────────────
+        # ابتدا state را به transfer_done تنظیم می‌کنیم تا handler خاموش‌سازی
+        # (transfer_disable_yes) فقط روی سرور مبدأ فعال باشد.
+        await state.set_state(AdminFlow.transfer_done)
+
         await msg.edit_text(
             f"✅ <b>انتقال با موفقیت انجام شد!</b>\n"
             f"ربات روی سرور مقصد (<code>{host}</code>) در حال اجراست.\n\n"
@@ -461,25 +488,40 @@ async def _run_transfer(msg: Message, creds: dict) -> None:
 # خاموش‌سازی سرور مبدأ
 # ──────────────────────────────────────────────────────────────────────
 
-@router.callback_query(kb.AdminCB.filter(F.action == "transfer_disable_yes"))
-async def transfer_disable_yes(call: CallbackQuery) -> None:
-    """خاموش کردن ربات روی سرور فعلی و ایجاد فایل DISABLED."""
-    await call.message.edit_text(  # type: ignore[union-attr]
-        "⏳ در حال خاموش‌سازی سرور فعلی...",
-        parse_mode="HTML",
-    )
+@router.callback_query(
+    kb.AdminCB.filter(F.action == "transfer_disable_yes"),
+    AdminFlow.transfer_done,
+)
+async def transfer_disable_yes(call: CallbackQuery, state: FSMContext) -> None:
+    """خاموش کردن ربات روی سرور فعلی و ایجاد فایل DISABLED.
+
+    محافظ FSM (AdminFlow.transfer_done) تضمین می‌کند که این callback
+    فقط روی سرور مبدأ پردازش می‌شود، نه روی سرور مقصد که هنوز
+    در حال اجرا است.
+
+    پیام موفقیت را پیش از راه‌اندازی compose down ارسال می‌کنیم، چون
+    compose down کانتینری را که این bot درون آن اجرا می‌شود می‌کشد
+    و در اکثر شرایط ارسال پیام پس از آن هیچ‌گاه اتفاق نمی‌افتد.
+    """
+    await state.clear()
+
+    # ── ۱. ابتدا پیام موفقیت را می‌فرستیم ────────────────────────────
+    # این کار باید پیش از شروع compose down انجام شود چون compose down
+    # فرآیند جاری (این ربات) را خاتمه می‌دهد.
+    timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    try:
+        await call.message.edit_text(  # type: ignore[union-attr]
+            "🔴 سرور مبدأ در حال خاموش شدن است...\n"
+            f"فایل <code>DISABLED</code> در <code>{SOURCE_DIR}</code> ایجاد شد.\n"
+            f"زمان: <code>{timestamp}</code>",
+            parse_mode="HTML",
+        )
+    except Exception:
+        pass
     await call.answer()
 
+    # ── ۲. ایجاد فایل نشانگر قبل از خاموش‌سازی ──────────────────────
     try:
-        down_proc = await asyncio.create_subprocess_exec(
-            "docker", "compose", "-f", f"{SOURCE_DIR}/docker-compose.yml", "down",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-        )
-        await down_proc.communicate()
-
-        # ایجاد فایل نشانگر
-        timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
         disabled_path = f"{SOURCE_DIR}/DISABLED"
         write_proc = await asyncio.create_subprocess_exec(
             "sh", "-c", f"echo 'disabled at {timestamp}' > {disabled_path}",
@@ -487,28 +529,29 @@ async def transfer_disable_yes(call: CallbackQuery) -> None:
             stderr=asyncio.subprocess.PIPE,
         )
         await write_proc.communicate()
+    except Exception as e:
+        logger.error("خطا در ایجاد فایل DISABLED: %s: %s", type(e).__name__, e)
 
-        await call.message.edit_text(  # type: ignore[union-attr]
-            "🔴 سرور مبدأ خاموش شد.\n"
-            f"فایل <code>DISABLED</code> در <code>{SOURCE_DIR}</code> ایجاد شد.",
-            parse_mode="HTML",
+    # ── ۳. خاموش‌سازی — fire-and-forget ─────────────────────────────
+    # compose down این container را می‌کشد؛ منتظر communicate() نمی‌مانیم
+    # چون ممکن است هیچ‌گاه برنگردد.
+    try:
+        await asyncio.create_subprocess_exec(
+            "docker", "compose", "-f", f"{SOURCE_DIR}/docker-compose.yml", "down",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
         )
     except Exception as e:
-        # جزئیات در لاگ سرور ثبت می‌شوند، نه در تلگرام
-        logger.error("خطا در خاموش‌سازی سرور مبدأ: %s: %s", type(e).__name__, e)
-        try:
-            await call.message.edit_text(  # type: ignore[union-attr]
-                "🔴 <b>خطا در خاموش‌سازی</b>\n\n"
-                "عملیات خاموش‌سازی با مشکل مواجه شد. جزئیات در لاگ سرور ثبت شده‌اند.",
-                parse_mode="HTML",
-            )
-        except Exception:
-            pass
+        logger.error("خطا در اجرای compose down: %s: %s", type(e).__name__, e)
 
 
-@router.callback_query(kb.AdminCB.filter(F.action == "transfer_disable_no"))
-async def transfer_disable_no(call: CallbackQuery) -> None:
+@router.callback_query(
+    kb.AdminCB.filter(F.action == "transfer_disable_no"),
+    AdminFlow.transfer_done,
+)
+async def transfer_disable_no(call: CallbackQuery, state: FSMContext) -> None:
     """ادمین تصمیم گرفت سرور مبدأ فعال بماند."""
+    await state.clear()
     await call.message.edit_text(  # type: ignore[union-attr]
         "✅ سرور مبدأ فعال ماند. انتقال کامل شد.",
         parse_mode="HTML",
