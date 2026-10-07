@@ -36,6 +36,7 @@ def home() -> InlineKeyboardMarkup:
     b.button(text="📣 پیام همگانی", callback_data=AdminCB(action="broadcast"))
     b.button(text="🔗 بازتولید لینک‌ها", callback_data=AdminCB(action="regen"))
     b.button(text="🔌 تست اتصال پنل", callback_data=AdminCB(action="ping"))
+    b.button(text="📦 انتقال به سرور جدید", callback_data=AdminCB(action="transfer"))
     b.adjust(2)
     return b.as_markup()
 
@@ -502,4 +503,22 @@ def inbound_security_choose(panel_id: int) -> InlineKeyboardMarkup:
     b.row(_back("inb_list", panel_id))
     return b.as_markup()
 
+    return b.as_markup()
+
+
+def transfer_confirm_kb() -> InlineKeyboardMarkup:
+    """تأیید یا لغو انتقال ربات به سرور جدید."""
+    b = InlineKeyboardBuilder()
+    b.button(text="✅ بله، انتقال بده", callback_data=AdminCB(action="transfer_confirm_yes"))
+    b.button(text="❌ لغو", callback_data=AdminCB(action="home"))
+    b.adjust(2)
+    return b.as_markup()
+
+
+def transfer_disable_kb() -> InlineKeyboardMarkup:
+    """پس از انتقال موفق: خاموش‌سازی سرور فعلی یا ادامه فعال ماندن."""
+    b = InlineKeyboardBuilder()
+    b.button(text="🔴 بله، سرور فعلی را خاموش کن", callback_data=AdminCB(action="transfer_disable_yes"))
+    b.button(text="✅ نه، فعال بماند", callback_data=AdminCB(action="transfer_disable_no"))
+    b.adjust(2)
     return b.as_markup()

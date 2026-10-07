@@ -6,6 +6,7 @@ from app.handlers.admin import (
     offers,
     panel,
     panels,
+    transfer,
     wallet_management,
     wallet_topup_requests,
 )
@@ -20,4 +21,5 @@ def get_admin_router() -> Router:
     router.include_router(wallet_topup_requests.router)
     router.include_router(activity.router)
     router.include_router(offers.router)
+    router.include_router(transfer.router)
     return router

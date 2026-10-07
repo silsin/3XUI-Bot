@@ -52,6 +52,9 @@ class AdminFlow(StatesGroup):
     inbound_network = State()
     inbound_security = State()
     inbound_extra = State()
+    # مراحل انتقال ربات به سرور جدید
+    transfer_creds = State()
+    transfer_confirm = State()
 
 
 class WalletTopupFlow(StatesGroup):
