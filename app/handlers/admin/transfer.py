@@ -190,7 +190,10 @@ async def transfer_confirm_stray_message(message: Message, state: FSMContext) ->
 # تأیید و شروع انتقال
 # ──────────────────────────────────────────────────────────────────────
 
-@router.callback_query(kb.AdminCB.filter(F.action == "transfer_confirm_yes"))
+@router.callback_query(
+    kb.AdminCB.filter(F.action == "transfer_confirm_yes"),
+    AdminFlow.transfer_confirm,
+)
 async def transfer_confirm_yes(call: CallbackQuery, state: FSMContext) -> None:
     """پاک‌سازی FSM و شروع انتقال در پس‌زمینه."""
     data = await state.get_data()
@@ -426,7 +429,11 @@ async def _run_transfer(msg: Message, creds: dict, state: FSMContext) -> None:
             )
 
             # ── ۸. اجرای docker compose روی مقصد ─────────────────────
-            await _edit("🚀 در حال راه‌اندازی ربات روی سرور مقصد...")
+            env_path_display = f"{dest_dir}/.env"
+            await _edit(
+                f"⚙️ فایل .env کپی شد (<code>{env_path_display}</code>)\n\n"
+                "🚀 در حال راه‌اندازی ربات روی سرور مقصد..."
+            )
 
             await conn.run(
                 f"cd {dest_dir} && docker compose up -d --build",
@@ -451,7 +458,16 @@ async def _run_transfer(msg: Message, creds: dict, state: FSMContext) -> None:
                     break
 
             if not container_up:
-                raise RuntimeError("کانتینر در ۱۲۰ ثانیه راه‌اندازی نشد.")
+                # بررسی جزئی‌تر وضعیت برای پیام خطای بهتر
+                r_all = await conn.run(
+                    f"cd {dest_dir} && docker compose ps --format '{{{{.Name}}}} {{{{.State}}}}'",
+                    check=False,
+                )
+                details = (r_all.stdout or "").strip()[:300]
+                raise RuntimeError(
+                    f"کانتینر در ۱۲۰ ثانیه به وضعیت running نرسید.\n"
+                    f"وضعیت فعلی:\n{details}"
+                )
 
             # تأخیر کوتاه پس از running تا فرآیند راه‌اندازی درون کانتینر
             # (مهاجرت DB و غیره) تکمیل شود، قبل از اعلام موفقیت.
