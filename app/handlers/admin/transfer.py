@@ -8,7 +8,6 @@ import io
 import logging
 import re
 import tarfile
-import tempfile
 
 import asyncssh  # اگر نصب نباشد خطا در استارت ظاهر می‌شود، نه در زمان اجرا
 
@@ -79,7 +78,6 @@ def _build_tar_in_memory(source_dir: str) -> bytes:
     استفاده از tarfile داخلی پایتون به جای اجرای tar سیستمی، وابستگی به
     نصب بودن tar در محیط Docker را حذف می‌کند.
     """
-    import os
     import pathlib
 
     buf = io.BytesIO()
@@ -158,9 +156,13 @@ async def transfer_creds_handler(message: Message, state: FSMContext) -> None:
         f"🔢 پورت: <code>{creds['port']}</code>\n"
         f"👤 کاربر: <code>{creds['user']}</code>\n"
         f"🔑 احراز هویت: {auth_type}\n\n"
-        "⚠️ <b>هشدار امنیتی:</b> هویت سرور مقصد تأیید نمی‌شود (known_hosts=None). "
-        "اگر مسیر شبکه در معرض خطر باشد، اطلاعات، دیتابیس و توکن ربات ممکن است "
-        "افشا شوند. تنها در صورتی که به شبکه اطمینان دارید ادامه دهید.\n\n"
+        "🔴 <b>هشدار امنیتی مهم (MITM):</b>\n"
+        "هویت سرور مقصد تأیید <b>نمی‌شود</b> (known_hosts=None).\n"
+        "در صورتی که مسیر شبکه در معرض خطر باشد، یک مهاجم فعال می‌تواند قبل از "
+        "برقراری رمزنگاری جایگزین شود و <b>توکن ربات، دیتابیس و فایل .env</b> را "
+        "شنود کند.\n\n"
+        "⚠️ تنها در شبکه‌ای که کاملاً به آن اطمینان دارید (مثلاً شبکه خصوصی یا VPN) "
+        "ادامه دهید.\n\n"
         "آیا انتقال را تأیید می‌کنید؟",
         parse_mode="HTML",
         reply_markup=kb.transfer_confirm_kb(),
@@ -194,6 +196,36 @@ async def transfer_confirm_yes(call: CallbackQuery, state: FSMContext) -> None:
     task = asyncio.create_task(_run_transfer(call.message, creds))  # type: ignore[arg-type]
     _active_transfers.add(task)
     task.add_done_callback(_active_transfers.discard)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# کشف نام واقعی Docker volume
+# ──────────────────────────────────────────────────────────────────────
+
+async def _find_bot_data_volume() -> str | None:
+    """نام واقعی volume دیتابیس را از Docker کشف می‌کند.
+
+    docker-compose.yml نام volume را bot_data اعلام می‌کند، اما Docker Compose
+    آن را با پیشوند نام پروژه ترکیب می‌کند (مثلاً alovpnbot_bot_data).
+    این تابع نام دقیق را از خروجی docker volume ls می‌خواند تا از
+    عدم تطابق نام جلوگیری شود.
+    """
+    proc = await asyncio.create_subprocess_exec(
+        "docker", "volume", "ls",
+        "--filter", "name=bot_data",
+        "--format", "{{.Name}}",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, _ = await proc.communicate()
+    if proc.returncode != 0:
+        return None
+    lines = [line.strip() for line in stdout.decode(errors="replace").splitlines() if line.strip()]
+    # انتخاب اول volume‌ای که نام آن شامل bot_data باشد
+    for name in lines:
+        if "bot_data" in name:
+            return name
+    return None
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -258,13 +290,28 @@ async def _run_transfer(msg: Message, creds: dict) -> None:
                     check=True,
                 )
 
+            # ── ۳b. اطمینان از وجود tar روی سرور مقصد ────────────────
+            # tar برای استخراج آرشیو پروژه الزامی است.
+            r_tar = await conn.run("tar --version", check=False)
+            if r_tar.exit_status != 0:
+                await _edit("🔧 tar روی سرور مقصد پیدا نشد — در حال نصب...")
+                # تلاش با apt-get (Debian/Ubuntu) و سپس apk (Alpine)
+                r_apt = await conn.run(
+                    "apt-get install -y tar 2>/dev/null || apk add --no-cache tar",
+                    check=False,
+                )
+                if r_apt.exit_status != 0:
+                    raise RuntimeError(
+                        "نصب tar روی سرور مقصد ناموفق بود. "
+                        "لطفاً tar را به صورت دستی نصب کنید."
+                    )
+
             # ── ۴. ساخت پوشه مقصد ─────────────────────────────────────
             await conn.run(f"mkdir -p {dest_dir}", check=True)
 
-            # ── ۵. کپی فایل‌های پروژه با tarfile پایتون + SFTP ────────
+            # ── ۵. کپی فایل‌های پروژه با tarfile پایتون ───────────────
             await _edit("📁 در حال فشرده‌سازی فایل‌های پروژه (tarfile پایتون)...")
 
-            import os
             import pathlib
 
             source_path = pathlib.Path(SOURCE_DIR)
@@ -285,7 +332,7 @@ async def _run_transfer(msg: Message, creds: dict) -> None:
                 "در حال انتقال به سرور مقصد..."
             )
 
-            # ارسال محتوای آرشیو از طریق SSH (بدون نیاز به tar سیستمی در مقصد)
+            # ارسال محتوای آرشیو از طریق SSH
             await conn.run(
                 f"tar -xzC {dest_dir}",
                 input=tar_bytes,
@@ -295,30 +342,43 @@ async def _run_transfer(msg: Message, creds: dict) -> None:
             # ── ۶. کپی دیتابیس از volume ──────────────────────────────
             await _edit("💾 در حال کپی دیتابیس...")
 
-            db_proc = await asyncio.create_subprocess_exec(
-                "docker", "run", "--rm",
-                "-v", "alovpn-bot_bot_data:/data:ro",
-                "alpine", "cat", "/data/bot.db",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            db_bytes, db_err = await db_proc.communicate()
-            if db_proc.returncode == 0 and db_bytes:
-                await conn.run(
-                    f"mkdir -p {dest_dir}/data && cat > {dest_dir}/data/bot.db",
-                    input=db_bytes,
-                    check=True,
+            # کشف نام واقعی volume — از hardcode اجتناب می‌شود
+            # زیرا Docker Compose نام پروژه را به volume اضافه می‌کند
+            # (مثلاً alovpnbot_bot_data به جای alovpn-bot_bot_data)
+            volume_name = await _find_bot_data_volume()
+            if volume_name:
+                db_proc = await asyncio.create_subprocess_exec(
+                    "docker", "run", "--rm",
+                    "-v", f"{volume_name}:/data:ro",
+                    "alpine", "cat", "/data/bot.db",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
                 )
+                db_bytes, db_err = await db_proc.communicate()
+                if db_proc.returncode == 0 and db_bytes:
+                    await conn.run(
+                        f"mkdir -p {dest_dir}/data && cat > {dest_dir}/data/bot.db",
+                        input=db_bytes,
+                        check=True,
+                    )
+                else:
+                    logger.warning(
+                        "کپی دیتابیس از volume ناموفق بود (returncode=%d)",
+                        db_proc.returncode,
+                    )
+                    await _edit(
+                        "⚠️ کپی دیتابیس از volume ناموفق بود — "
+                        "احتمالاً Docker socket در دسترس نیست.\n"
+                        "ادامه انتقال..."
+                    )
+                    await asyncio.sleep(3)
             else:
-                logger.warning(
-                    "کپی دیتابیس از volume انجام نشد (احتمالاً Docker socket در دسترس نیست)"
+                logger.warning("volume دیتابیس (bot_data) در این سرور پیدا نشد")
+                raise RuntimeError(
+                    "volume دیتابیس (bot_data) پیدا نشد.\n"
+                    "لطفاً مطمئن شوید که Docker socket در دسترس ربات است و "
+                    "volume با docker volume ls قابل رویت است."
                 )
-                await _edit(
-                    "⚠️ کپی دیتابیس از volume انجام نشد — "
-                    "احتمالاً Docker socket در دسترس نیست.\n"
-                    "ادامه انتقال..."
-                )
-                await asyncio.sleep(3)
 
             # ── ۷. کپی فایل .env — در صورت خطا انتقال متوقف می‌شود ────
             await _edit("⚙️ در حال کپی تنظیمات .env...")
@@ -370,6 +430,10 @@ async def _run_transfer(msg: Message, creds: dict) -> None:
             if not container_up:
                 raise RuntimeError("کانتینر در ۱۲۰ ثانیه راه‌اندازی نشد.")
 
+            # تأخیر کوتاه پس از running تا فرآیند راه‌اندازی درون کانتینر
+            # (مهاجرت DB و غیره) تکمیل شود، قبل از اعلام موفقیت.
+            await asyncio.sleep(5)
+
         # ── ۱۰. موفقیت ────────────────────────────────────────────────
         await msg.edit_text(
             f"✅ <b>انتقال با موفقیت انجام شد!</b>\n"
@@ -380,11 +444,13 @@ async def _run_transfer(msg: Message, creds: dict) -> None:
         )
 
     except Exception as e:
-        # هیچ‌گاه مقادیر اطلاعات حساس لاگ نمی‌شوند
-        logger.error("خطا در فرآیند انتقال: %s", type(e).__name__)
+        # نوع خطا در لاگ سرور ثبت می‌شود؛ جزئیات حساس (نام کاربری، هاست) به تلگرام ارسال نمی‌شوند.
+        logger.error("خطا در فرآیند انتقال: %s: %s", type(e).__name__, e)
         try:
             await msg.edit_text(
-                f"🔴 <b>خطا در انتقال:</b>\n<code>{str(e)[:500]}</code>",
+                "🔴 <b>خطا در انتقال</b>\n\n"
+                "عملیات انتقال با مشکل مواجه شد. جزئیات در لاگ سرور ثبت شده‌اند.\n"
+                "لطفاً از صحت اطلاعات SSH و دسترسی سرور مقصد اطمینان حاصل کنید.",
                 parse_mode="HTML",
             )
         except Exception:
@@ -428,10 +494,12 @@ async def transfer_disable_yes(call: CallbackQuery) -> None:
             parse_mode="HTML",
         )
     except Exception as e:
-        logger.error("خطا در خاموش‌سازی سرور مبدأ: %s", type(e).__name__)
+        # جزئیات در لاگ سرور ثبت می‌شوند، نه در تلگرام
+        logger.error("خطا در خاموش‌سازی سرور مبدأ: %s: %s", type(e).__name__, e)
         try:
             await call.message.edit_text(  # type: ignore[union-attr]
-                f"🔴 <b>خطا در خاموش‌سازی:</b>\n<code>{str(e)[:400]}</code>",
+                "🔴 <b>خطا در خاموش‌سازی</b>\n\n"
+                "عملیات خاموش‌سازی با مشکل مواجه شد. جزئیات در لاگ سرور ثبت شده‌اند.",
                 parse_mode="HTML",
             )
         except Exception:

@@ -413,6 +413,31 @@ python -m py_compile app/handlers/admin/__init__.py   → OK (exit 0)
 
 ---
 
+## Verification Results — Iteration 3 (review fix round 2)
+
+Review findings from `transfer-review.json` (second review) addressed:
+
+1. **`str(e)` leaks asyncssh exception details** — Both `_run_transfer` and `transfer_disable_yes` now show a generic Farsi error message in Telegram. Exception type and message are logged server-side only via `logger.error("... %s: %s", type(e).__name__, e)`. No raw exception string sent to Telegram.
+
+2. **Hardcoded volume name mismatch** — Added `_find_bot_data_volume()` async helper that runs `docker volume ls --filter name=bot_data --format {{.Name}}` and returns the first matching volume name. DB copy step now uses the discovered name. If no volume is found, raises a hard `RuntimeError` (no silent skip).
+
+3. **`tar` not guaranteed on destination** — Added step 3b: runs `tar --version` on destination; if missing, attempts `apt-get install -y tar || apk add --no-cache tar`; raises `RuntimeError` if install fails.
+
+4. **No host key fingerprint alternative** — User chose option B: keep today's flow unchanged, strengthen MITM warning in confirmation screen. Warning now explicitly names the MITM attack vector, names what data is at risk (token, DB, .env), and advises private network / VPN only use.
+
+5. **Container readiness poll fires too early** — Added `await asyncio.sleep(5)` after the `running` status is confirmed, before declaring success. This gives in-container startup tasks (DB migration etc.) time to complete.
+
+All syntax checks passed after fixes:
+
+```
+python -m py_compile app/handlers/admin/transfer.py   → OK (exit 0)
+python -m py_compile app/states.py                    → OK (exit 0)
+python -m py_compile app/keyboards/admin.py           → OK (exit 0)
+python -m py_compile app/handlers/admin/__init__.py   → OK (exit 0)
+```
+
+---
+
 ## Notes for implementer
 
 - **Credentials security:** Never pass raw credential text to `logger`. Parse immediately, then discard the message.
