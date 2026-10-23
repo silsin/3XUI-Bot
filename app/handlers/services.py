@@ -164,9 +164,23 @@ async def view_service(
     if service is None or service.user_id != user.id:
         await call.answer("سرویس یافت نشد.", show_alert=True)
         return
-    # اعمال سهمیه/انقضا در لحظه مشاهده
-    service = await provisioning.sync_service(session, service)
+
+    # call.answer را زودتر می‌فرستیم تا لودینگ تلگرام قطع شود
+    # حتی اگر sync_service یا render بعداً خطا بدهد کاربر پاسخ می‌گیرد
     await call.answer()
+
+    # اعمال سهمیه/انقضا در لحظه مشاهده — اگر پنل در دسترس نباشد خطا را می‌بلعیم
+    try:
+        service = await provisioning.sync_service(session, service)
+    except Exception:
+        logger.warning("sync_service failed for service %s — showing cached data", service.id)
+
+    # بارگذاری کلاینت‌ها (برای نمایش دکمه‌های کانفیگ)
+    service = await _get_service(session, service.id)
+    if service is None:
+        await call.message.answer("❌ سرویس یافت نشد.")
+        return
+
     try:
         await call.message.edit_text(
             await _detail_text(service, session),
@@ -175,6 +189,7 @@ async def view_service(
         )
     except Exception:  # noqa: BLE001 — پیام تغییری نکرده
         pass
+
     # لاگ فعالیت
     await activity.log_activity(
         session, user.id, activity.Actions.VIEW_CONFIG,
@@ -253,7 +268,15 @@ async def refresh_service(
         await call.answer("سرویس یافت نشد.", show_alert=True)
         return
     await call.answer("در حال به‌روزرسانی...")
-    service = await provisioning.sync_service(session, service)
+    try:
+        service = await provisioning.sync_service(session, service)
+    except Exception:
+        logger.warning("sync_service failed for service %s — showing cached data", service.id)
+
+    service = await _get_service(session, service.id)
+    if service is None:
+        await call.message.answer("❌ سرویس یافت نشد.")
+        return
     try:
         await call.message.edit_text(
             await _detail_text(service, session),
