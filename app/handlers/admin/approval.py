@@ -80,10 +80,13 @@ async def approve(
                 device_limit=device_limit,
                 order=order,
             )
-    except VpnError as exc:
-        logger.error("provisioning failed for order %s: %s", order.id, exc)
+    except Exception as exc:  # noqa: BLE001 — هر خطایی (نه فقط VpnError) باید به ادمین گزارش شود
+        order_id = order.id
+        logger.exception("provisioning failed for order %s", order_id)
+        await session.rollback()
         await call.message.reply(
-            f"❌ ساخت کانفیگ برای سفارش #{order.id} ناموفق بود:\n<code>{exc}</code>\n"
+            f"❌ ساخت کانفیگ برای سفارش #{order_id} ناموفق بود:\n"
+            f"<code>{type(exc).__name__}: {exc}</code>\n"
             "پس از رفع مشکل دوباره «تأیید» را بزنید."
         )
         return
@@ -94,14 +97,20 @@ async def approve(
     await session.commit()
 
     # تحویل کانفیگ به کاربر
+    delivered = True
     try:
         await bot.send_message(buyer.id, "🎉 پرداخت شما تأیید شد!")
         await send_config(bot, buyer.id, service, session)
     except Exception:  # noqa: BLE001
+        delivered = False
         logger.exception("failed delivering config to user %s", buyer.id)
 
     # پاداش معرف در اولین خرید
-    reward = await pts.reward_referrer_on_first_purchase(session, buyer)
+    try:
+        reward = await pts.reward_referrer_on_first_purchase(session, buyer)
+    except Exception:  # noqa: BLE001
+        logger.exception("referral reward failed for order %s", order.id)
+        reward = None
     if reward is not None:
         referrer, points = reward
         try:
@@ -113,9 +122,20 @@ async def approve(
         except Exception:  # noqa: BLE001
             logger.info("could not notify referrer %s", referrer.id)
 
-    await _mark_reviewed(
-        bot, order, f"✅ تأیید شد و کانفیگ ارسال گردید. (توسط {call.from_user.id})"
+    status_line = (
+        "✅ تأیید شد و کانفیگ ارسال گردید."
+        if delivered
+        else "⚠️ تأیید و ساخته شد ولی ارسال کانفیگ به کاربر ناموفق بود."
     )
+    await _mark_reviewed(bot, order, f"{status_line} (توسط {call.from_user.id})")
+
+    # پیام صریح موفقیت برای ادمین (ویرایش کپشن ممکن است بی‌صدا ناموفق شود)
+    try:
+        await call.message.reply(
+            f"{status_line}\n🧾 سفارش #{order.id} — سرویس #{service.id}"
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("could not send approval confirmation for order %s", order.id)
 
 
 @router.callback_query(inline.ReceiptCB.filter(F.action == "reject"))

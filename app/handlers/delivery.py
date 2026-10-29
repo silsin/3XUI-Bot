@@ -66,7 +66,7 @@ async def send_config(bot: Bot, chat_id: int, service: Service, session, skip_re
         try:
             await provisioning.regenerate_links(session, service.id)
         except Exception:
-            logger.warning("regenerate_links failed before send_config, continuing anyway")
+            logger.exception("regenerate_links failed before send_config, continuing anyway")
 
     svc = (
         await session.execute(
