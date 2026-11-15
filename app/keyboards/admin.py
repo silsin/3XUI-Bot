@@ -269,6 +269,7 @@ def offer_detail_kb(offer) -> InlineKeyboardMarkup:
     )
     b.adjust(2)
     b.row(_back("offers"))
+    return b.as_markup()
 
 # ---------- پنل‌ها و اینباندها ----------
 
