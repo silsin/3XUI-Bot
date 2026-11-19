@@ -522,6 +522,27 @@ async def create_order(
                 order=order,
             )
             
+            # پاداش کیف پول به دعوت‌کننده (کمپین پاداش دعوت)
+            try:
+                from app.services import referral_rewards
+                rewards = await referral_rewards.reward_inviter_for_order(
+                    session, order, user
+                )
+                await session.commit()
+            except Exception:  # noqa: BLE001
+                await session.rollback()
+                logger.exception("wallet referral reward failed for order %s", order.id)
+                rewards = []
+            for inviter_id, reward_amount in rewards:
+                try:
+                    await call.bot.send_message(
+                        inviter_id,
+                        "🎉 یکی از دوستان دعوت‌شده شما سرویس خرید!\n"
+                        f"<b>{money(reward_amount)} تومان</b> به کیف پول شما اضافه شد.",
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.info("could not notify inviter %s", inviter_id)
+
             text = (
                 f"✅ <b>خرید موفق!</b>\n\n"
                 f"سفارش #{order.id} تأیید شد.\n"

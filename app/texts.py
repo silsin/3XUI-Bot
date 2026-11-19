@@ -33,6 +33,8 @@ S_CARD_NUMBER = "card_number"
 S_CARD_HOLDER = "card_holder"
 S_INVITE_TEXT = "invite_text"
 S_POINTS_TEXT = "points_text"
+S_INVITE_WALLET_TEXT = "invite_wallet_text"      # متن دعوت وقتی کمپین پاداش کیف پول فعال است
+S_POINTS_WALLET_TEXT = "points_wallet_text"      # متن «امتیاز من» وقتی کمپین پاداش کیف پول فعال است
 S_TRIAL_ENABLED = "trial_enabled"
 S_TRIAL_DAYS = "trial_days"
 S_TRIAL_MB = "trial_mb"
@@ -100,6 +102,23 @@ DEFAULT_SETTINGS: dict[str, str] = {
         "امتیازها را می‌توانید به <b>روز اشتراک هدیه</b> تبدیل کنید.\n\n"
         "🔗 لینک شما:\n{link}\n\n"
         "تعداد دعوت‌های موفق شما: <b>{invited}</b> نفر"
+    ),
+    S_INVITE_WALLET_TEXT: (
+        "👥 <b>دعوت از دوستان</b>\n\n"
+        "با لینک اختصاصی زیر دوستان خود را دعوت کنید.\n"
+        "وقتی دوست شما <b>سرویس بخرد</b>، مبلغ زیر مستقیماً "
+        "به <b>کیف پول شما</b> اضافه می‌شود:\n\n"
+        "{rewards}\n\n"
+        "🔗 لینک شما:\n{link}\n\n"
+        "تعداد دعوت‌های موفق شما: <b>{invited}</b> نفر"
+    ),
+    S_POINTS_WALLET_TEXT: (
+        "🏅 <b>امتیاز من</b>\n\n"
+        "امتیاز فعلی: <b>{points}</b>\n"
+        "نرخ تبدیل: هر <b>{per_day}</b> امتیاز = <b>۱ روز</b> اشتراک هدیه\n"
+        "معادل: <b>{days}</b> روز\n\n"
+        "🎁 <b>کمپین فعال:</b> با دعوت دوستان، وقتی سرویس بخرند "
+        "به‌جای امتیاز، <b>پول به کیف پول شما</b> اضافه می‌شود:\n{rewards}"
     ),
     S_POINTS_TEXT: (
         "🏅 <b>امتیاز من</b>\n\n"

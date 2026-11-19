@@ -12,6 +12,7 @@ from app.handlers.delivery import send_config
 from app.keyboards import inline
 from app.services import activity_service as activity
 from app.services import points_service as pts
+from app.services import referral_rewards
 from app.services import provisioning
 from app.services import settings_service as cfg
 from app.services.vpn import VpnError
@@ -20,6 +21,8 @@ from app.texts import (
     BTN_POINTS,
     MSG_PANEL_ERROR,
     S_INVITE_TEXT,
+    S_INVITE_WALLET_TEXT,
+    S_POINTS_WALLET_TEXT,
     S_POINTS_PER_DAY,
     S_POINTS_TEXT,
     S_REDEEM_INBOUND,
@@ -35,11 +38,13 @@ router = Router(name="points")
 async def my_points(message: Message, session: AsyncSession, user: User) -> None:
     per_day = await cfg.get_int(session, S_POINTS_PER_DAY, 10)
     days = await pts.points_to_days(session, user.points)
+    camps = await referral_rewards.active_campaigns(session)
     text = render(
-        await cfg.get(session, S_POINTS_TEXT),
+        await cfg.get(session, S_POINTS_WALLET_TEXT if camps else S_POINTS_TEXT),
         points=fa_digits(user.points),
         per_day=fa_digits(per_day),
         days=fa_digits(days),
+        rewards=await referral_rewards.rewards_text(session, camps) if camps else "",
     )
     await message.answer(text, reply_markup=inline.points_kb(days))
     # لاگ فعالیت
@@ -102,11 +107,13 @@ async def invite(message: Message, session: AsyncSession, user: User) -> None:
     points = await cfg.get_int(session, S_REFERRAL_POINTS, 10)
     invited = await pts.count_successful_referrals(session, user.id)
 
+    camps = await referral_rewards.active_campaigns(session)
     text = render(
-        await cfg.get(session, S_INVITE_TEXT),
+        await cfg.get(session, S_INVITE_WALLET_TEXT if camps else S_INVITE_TEXT),
         points=fa_digits(points),
         link=link,
         invited=fa_digits(invited),
+        rewards=await referral_rewards.rewards_text(session, camps) if camps else "",
     )
     share = "با این ربات به‌راحتی اشتراک تهیه کن! 🌐"
     await message.answer(

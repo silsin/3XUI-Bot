@@ -36,9 +36,11 @@ from app.texts import (
     S_SUB_PUBLIC_URL,
     S_GUIDE_TEXT,
     S_INVITE_TEXT,
+    S_INVITE_WALLET_TEXT,
     S_MULTI_INBOUNDS,
     S_POINTS_PER_DAY,
     S_POINTS_TEXT,
+    S_POINTS_WALLET_TEXT,
     S_REDEEM_INBOUND,
     S_REFERRAL_POINTS,
     S_SUPPORT_TEXT,
@@ -64,6 +66,8 @@ TEXT_FIELDS = [
     (S_SUPPORT_TEXT, "پشتیبانی"),
     (S_INVITE_TEXT, "متن دعوت"),
     (S_POINTS_TEXT, "متن امتیاز"),
+    (S_INVITE_WALLET_TEXT, "متن دعوت (وقتی کمپین پاداش کیف پول فعال است) {rewards}"),
+    (S_POINTS_WALLET_TEXT, "متن امتیاز (وقتی کمپین پاداش کیف پول فعال است) {rewards}"),
     (S_CONFIG_HOST_OVERRIDE, "آدرس جایگزین در کانفیگ (خالی = آدرس پنل)"),
     (S_SUB_PUBLIC_URL, "آدرس لینک اشتراک (خالی = از .env)"),
 ]
@@ -400,7 +404,8 @@ async def edit_field(
     await state.update_data(key=key)
     preview = current if len(current) < 600 else current[:600] + "…"
     hint = "\n\nمی‌توانید از {name}، {amount}، {card_number}، {link} و ... استفاده کنید." if key in {
-        S_WELCOME_TEXT, S_BUY_INSTRUCTION, S_INVITE_TEXT, S_POINTS_TEXT, S_CONFIG_CAPTION
+        S_WELCOME_TEXT, S_BUY_INSTRUCTION, S_INVITE_TEXT, S_POINTS_TEXT, S_CONFIG_CAPTION,
+        S_INVITE_WALLET_TEXT, S_POINTS_WALLET_TEXT
     } else ""
     number_hint = "\n\n⚠️ فقط عدد وارد کنید." if key in NUMERIC_KEYS else ""
     await call.message.answer(

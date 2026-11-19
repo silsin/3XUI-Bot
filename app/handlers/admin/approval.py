@@ -108,7 +108,11 @@ async def approve(
 
     # پاداش معرف در اولین خرید
     try:
-        reward = await pts.reward_referrer_on_first_purchase(session, buyer)
+        # وقتی کمپین پاداش کیف پول فعال است، امتیاز دعوت داده نمی‌شود
+        if await referral_rewards.active_campaigns(session):
+            reward = None
+        else:
+            reward = await pts.reward_referrer_on_first_purchase(session, buyer)
     except Exception:  # noqa: BLE001
         logger.exception("referral reward failed for order %s", order.id)
         reward = None

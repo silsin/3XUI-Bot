@@ -31,6 +31,43 @@ def _aware(dt):
     return dt if dt is None or dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
+async def active_campaigns(session: AsyncSession) -> list[ReferralCampaign]:
+    """کمپین‌های فعالِ در بازه زمانی و دارای ظرفیت (برای نمایش به کاربر)."""
+    now = utcnow()
+    rows = (
+        await session.scalars(
+            select(ReferralCampaign)
+            .where(ReferralCampaign.is_active.is_(True))
+            .order_by(ReferralCampaign.reward_amount.desc())
+        )
+    ).all()
+    out = []
+    for c in rows:
+        until = _aware(c.valid_until)
+        if until is not None and until <= now:
+            continue
+        if c.max_rewards and c.rewarded_count >= c.max_rewards:
+            continue
+        out.append(c)
+    return out
+
+
+async def rewards_text(session: AsyncSession, campaigns: list[ReferralCampaign]) -> str:
+    """لیست خوانا پاداش‌ها برای جایگزینی در {rewards}."""
+    from app.db.models import Package
+    from app.utils.formatting import money
+
+    lines = []
+    for c in campaigns:
+        if c.package_id:
+            pkg = await session.get(Package, c.package_id)
+            what = f"خرید «{pkg.title}»" if pkg else "خرید سرویس"
+        else:
+            what = "خرید هر سرویس"
+        lines.append(f"💰 {what}: <b>{money(c.reward_amount)} تومان</b>")
+    return "\n".join(lines)
+
+
 async def reward_inviter_for_order(
     session: AsyncSession, order: Order, buyer: User
 ) -> list[tuple[int, int]]:
