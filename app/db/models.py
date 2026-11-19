@@ -354,6 +354,7 @@ class WalletTransactionType(str, enum.Enum):
     REFUND = "refund"              # بازگشت مبلغ
     OFFER_BONUS = "offer_bonus"    # بونوس از جشنواره
     REFERRAL_BONUS = "referral_bonus"  # بونوس معرفی
+    WITHDRAWAL = "withdrawal"      # برداشت کاربر (درخواست برداشت وجه)
 
 
 class UserWallet(Base):
@@ -445,6 +446,84 @@ class WalletTopupRequest(Base):
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     user: Mapped["User"] = relationship(viewonly=True)
+
+
+class WithdrawalStatus(str, enum.Enum):
+    """وضعیت درخواست برداشت از کیف پول."""
+    PENDING = "pending"        # منتظر بررسی ادمین (مبلغ از کیف پول کسر و نگه‌داری شده)
+    APPROVED = "approved"      # تایید شد، منتظر واریز و ارسال رسید توسط ادمین
+    COMPLETED = "completed"    # واریز شد و رسید برای کاربر ارسال شد
+    REJECTED = "rejected"      # رد شد، مبلغ به کیف پول برگشت
+    CANCELLED = "cancelled"    # لغو توسط کاربر، مبلغ برگشت
+
+
+class WithdrawalRequest(Base):
+    """درخواست برداشت موجودی کیف پول توسط کاربر."""
+
+    __tablename__ = "wallet_withdrawal_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    amount: Mapped[int] = mapped_column(BigInteger)  # تومان
+    card_number: Mapped[str] = mapped_column(String(32), default="")
+    card_holder: Mapped[str] = mapped_column(String(128), default="")
+    status: Mapped[WithdrawalStatus] = mapped_column(
+        Enum(WithdrawalStatus), default=WithdrawalStatus.PENDING, index=True
+    )
+    # پیام‌های ارسال‌شده به ادمین‌ها: [[chat_id, message_id], ...]
+    notify_msgs: Mapped[str] = mapped_column(Text, default="")
+
+    # رسید واریز ادمین
+    receipt_file_id: Mapped[str | None] = mapped_column(String(256))
+    receipt_is_document: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    admin_id: Mapped[int | None] = mapped_column(BigInteger)
+    admin_note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped["User"] = relationship(viewonly=True)
+
+
+class ReferralCampaign(Base):
+    """کمپین پاداش دعوت: اگر دعوت‌شده سرویس بخرد، مبلغ به کیف پول دعوت‌کننده می‌رود."""
+
+    __tablename__ = "referral_campaigns"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(128))
+    reward_amount: Mapped[int] = mapped_column(BigInteger)  # تومان
+    # فقط خرید این پکیج مشمول است؛ None = همه پکیج‌ها
+    package_id: Mapped[int | None] = mapped_column(
+        ForeignKey("packages.id", ondelete="SET NULL"), nullable=True
+    )
+    max_rewards: Mapped[int] = mapped_column(Integer, default=0)   # 0 = نامحدود
+    rewarded_count: Mapped[int] = mapped_column(Integer, default=0)
+    valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    package: Mapped["Package | None"] = relationship(viewonly=True)
+
+
+class ReferralReward(Base):
+    """پاداش پرداخت‌شده؛ برای هر (کمپین، دعوت‌شده) حداکثر یک‌بار."""
+
+    __tablename__ = "referral_rewards"
+    __table_args__ = (UniqueConstraint("campaign_id", "invitee_id", name="uq_referral_reward"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(
+        ForeignKey("referral_campaigns.id", ondelete="CASCADE"), index=True
+    )
+    inviter_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    invitee_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    order_id: Mapped[int | None] = mapped_column(ForeignKey("orders.id", ondelete="SET NULL"))
+    amount: Mapped[int] = mapped_column(BigInteger)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class Panel(Base):

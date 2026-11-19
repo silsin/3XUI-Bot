@@ -64,6 +64,27 @@ class WalletTopupFlow(StatesGroup):
     waiting_receipt = State()      # کاربر رسید را ارسال می‌کند
 
 
+class RefCampaignFlow(StatesGroup):
+    """ساخت کمپین پاداش دعوت (ادمین)."""
+    title = State()
+    reward = State()
+    max_rewards = State()
+    valid_days = State()
+
+
+class WithdrawalFlow(StatesGroup):
+    """جریان درخواست برداشت از کیف پول (کاربر)."""
+    waiting_amount = State()
+    waiting_card = State()
+    waiting_holder = State()
+    confirming = State()
+
+
+class WithdrawalAdminFlow(StatesGroup):
+    """ادمین رسید واریز برداشت را ارسال می‌کند."""
+    waiting_receipt = State()
+
+
 class WalletFlow(StatesGroup):
     # ── مرحله ۱: انتخاب سرویس والد (از طریق inline keyboard)
     # (بدون state — مستقیم با callback شروع می‌شود)

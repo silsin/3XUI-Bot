@@ -18,6 +18,7 @@ from app.handlers.delivery import send_config
 from app.keyboards import inline
 from app.services import points_service as pts
 from app.services import provisioning
+from app.services import referral_rewards
 from app.services.vpn import VpnError
 from app.states import AdminFlow
 from app.texts import MSG_ORDER_REJECTED
@@ -121,6 +122,26 @@ async def approve(
             )
         except Exception:  # noqa: BLE001
             logger.info("could not notify referrer %s", referrer.id)
+
+    # پاداش کیف پول به دعوت‌کننده (کمپین پاداش دعوت)
+    try:
+        wallet_rewards = await referral_rewards.reward_inviter_for_order(
+            session, order, buyer
+        )
+        await session.commit()
+    except Exception:  # noqa: BLE001
+        await session.rollback()
+        logger.exception("wallet referral reward failed for order %s", order.id)
+        wallet_rewards = []
+    for inviter_id, amount in wallet_rewards:
+        try:
+            await bot.send_message(
+                inviter_id,
+                f"🎉 یکی از دوستان دعوت‌شده شما سرویس خرید!\n"
+                f"<b>{money(amount)} تومان</b> به کیف پول شما اضافه شد.",
+            )
+        except Exception:  # noqa: BLE001
+            logger.info("could not notify inviter %s", inviter_id)
 
     status_line = (
         "✅ تأیید شد و کانفیگ ارسال گردید."

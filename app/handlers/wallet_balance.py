@@ -51,6 +51,7 @@ async def _format_transaction_type(tx_type: WalletTransactionType) -> str:
         WalletTransactionType.REFUND: "↩️ بازگشت",
         WalletTransactionType.OFFER_BONUS: "🎁 بونوس جشنواره",
         WalletTransactionType.REFERRAL_BONUS: "👥 بونوس معرفی",
+        WalletTransactionType.WITHDRAWAL: "💸 برداشت",
     }
     return type_labels.get(tx_type, str(tx_type))
 
@@ -94,6 +95,12 @@ def wallet_menu_kb(has_balance: bool = False) -> inline.InlineKeyboardMarkup:
         text="➕ درخواست شارژ",
         callback_data="wallet:request_topup",
     )
+    
+    if has_balance:
+        builder.button(
+            text="💸 درخواست برداشت",
+            callback_data="wd:start",
+        )
     
     builder.button(
         text="📊 تاریخچه تراکنش‌ها",
